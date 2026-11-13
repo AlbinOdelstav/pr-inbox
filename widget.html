@@ -327,8 +327,8 @@ function toast(msg) {
 function row(pr) {
     const who = pr.direct ? '<span class="you">You</span>' : pr.viaTeams.map((t) => `<span class="team">${esc(t)}</span>`).join('');
     const repo = isHome(pr.repo) ? '' : esc(pr.repo.split('/')[1]) + ' ';
-    const can = !!(pr.session || pr.localClone);
-    const tip = pr.session ? `Open your session (${ago(pr.session.lastActive)} ago)` : can ? `Review #${pr.number} in Claude` : `No local clone of ${pr.repo}`;
+    const can = !!(pr.session || (pr.localClone && !pr.queue));
+    const tip = pr.session ? `Open your session (${ago(pr.session.lastActive)} ago)` : pr.queue ? 'In the merge queue: already approved and on its way in, so there is nothing to review' : can ? `Review #${pr.number} in Claude` : `No local clone of ${pr.repo}`;
     const rr = pr.rereview;
     const main = `<button class="go${pr.session ? ' resume' : ''}" data-repo="${esc(pr.repo)}" data-number="${pr.number}" title="${esc(tip)}" aria-label="${esc(tip)}" ${can ? '' : 'disabled'}>${pr.session ? ARROW : SPARK}</button>`;
     const act = rr ? recheckActions(pr, `your review was requested again; ${ago(rr.reviewedAt)} since your ${rr.previous === 'approved' ? 'approval' : 'review'}`, main) : { html: main, two: false };
@@ -609,12 +609,12 @@ function render() {
     shown = filter === 'you' ? you : filter === 'team' ? team : all;
     const allBtn = $('all');
     if (!allBtn.classList.contains('busy')) {
-        const fresh = shown.filter((p) => !p.session && !p.isDraft);
+        const fresh = shown.filter((p) => !p.session && !p.isDraft && !p.queue);
         allBtn.innerHTML = `${SPARK}<span>New ${fresh.length}</span>`;
         allBtn.disabled = fresh.length === 0;
         allBtn.title = fresh.length
-            ? `Review the ${fresh.length} PR${fresh.length === 1 ? '' : 's'} without a session, in parallel. Drafts are left out`
-            : 'Nothing new to review: the PRs here already have a session or are drafts';
+            ? `Review the ${fresh.length} PR${fresh.length === 1 ? '' : 's'} without a session, in parallel. Drafts and queued PRs are left out`
+            : 'Nothing new to review: the PRs here already have a session, are drafts or are queued';
     }
     const rcBtn = $('recheckAll');
     if (!rcBtn.classList.contains('busy')) {
@@ -779,7 +779,7 @@ $('all').addEventListener('click', async () => {
     btn.disabled = true;
     btn.classList.add('busy');
     try {
-        const r = await post('/api/review-all', { prs: shown.filter((p) => !p.session && !p.isDraft).map((p) => ({ repo: p.repo, number: p.number })) });
+        const r = await post('/api/review-all', { prs: shown.filter((p) => !p.session && !p.isDraft && !p.queue).map((p) => ({ repo: p.repo, number: p.number })) });
         btn.innerHTML = `${CHECK}<span>Opened</span>`;
         toast(`${r.count} parallel reviews ready in Claude. Press Enter`);
     } catch (err) {
