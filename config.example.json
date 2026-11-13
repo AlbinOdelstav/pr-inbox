@@ -1,0 +1,6 @@
+{
+  "homeRepo": "your-org/your-main-repo",
+  "benchmarkTeam": "your-org/your-team-slug",
+  "cloneRoots": ["C:\\", "C:\\Users\\you\\source\\repos"],
+  "appId": "PrInbox.Widget"
+}

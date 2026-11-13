@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Inbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%236d5efc'/%3E%3Cpath d='M10 16.5l4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+    --bg: #f6f5f2;
+    --bg-glow-1: rgba(109, 94, 252, 0.14);
+    --bg-glow-2: rgba(255, 145, 77, 0.12);
+    --surface: rgba(255, 255, 255, 0.78);
+    --surface-hover: #ffffff;
+    --border: rgba(20, 18, 40, 0.08);
+    --border-strong: rgba(20, 18, 40, 0.14);
+    --text: #17151f;
+    --text-2: #5d5a6b;
+    --text-3: #8f8c9c;
+    --accent: #6d5efc;
+    --accent-2: #9b6bff;
+    --accent-soft: rgba(109, 94, 252, 0.1);
+    --accent-text: #5545e8;
+    --team-soft: rgba(255, 145, 77, 0.13);
+    --team-text: #b5560f;
+    --green: #1f9d63;
+    --red: #d84a4a;
+    --amber: #d59312;
+    --shadow: 0 1px 2px rgba(20, 18, 40, 0.04), 0 4px 16px rgba(20, 18, 40, 0.04);
+    --shadow-hover: 0 2px 4px rgba(20, 18, 40, 0.05), 0 12px 32px rgba(20, 18, 40, 0.09);
+    color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #0d0c12;
+        --bg-glow-1: rgba(109, 94, 252, 0.22);
+        --bg-glow-2: rgba(255, 145, 77, 0.08);
+        --surface: rgba(28, 26, 38, 0.72);
+        --surface-hover: rgba(36, 33, 49, 0.95);
+        --border: rgba(255, 255, 255, 0.07);
+        --border-strong: rgba(255, 255, 255, 0.13);
+        --text: #f1effa;
+        --text-2: #aaa6bd;
+        --text-3: #716d85;
+        --accent-soft: rgba(139, 126, 255, 0.16);
+        --accent-text: #a99fff;
+        --team-soft: rgba(255, 160, 100, 0.13);
+        --team-text: #ffb07a;
+        --green: #3ccf8e;
+        --red: #ff6b6b;
+        --amber: #f5b83d;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.45);
+        color-scheme: dark;
+    }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(900px 500px at 12% -10%, var(--bg-glow-1), transparent 70%),
+        radial-gradient(700px 400px at 95% 0%, var(--bg-glow-2), transparent 70%),
+        var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; }
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 72px 24px 96px; }
+
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 36px; flex-wrap: wrap; }
+.eyebrow { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; font-weight: 500; letter-spacing: .02em; margin-bottom: 10px; }
+.eyebrow img { width: 20px; height: 20px; border-radius: 50%; }
+h1 { margin: 0; font-size: 40px; line-height: 1.05; font-weight: 700; letter-spacing: -0.035em; }
+h1 .count {
+    display: inline-block; margin-left: 10px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
+    padding: 2px 12px; border-radius: 999px; vertical-align: 8px;
+    color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 18px rgba(109, 94, 252, 0.35);
+}
+.sub { margin: 10px 0 0; color: var(--text-2); font-size: 15px; }
+
+.toolbar { display: flex; align-items: center; gap: 10px; }
+.segmented { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); backdrop-filter: blur(12px); }
+.segmented button {
+    border: 0; background: transparent; padding: 6px 14px; border-radius: 9px; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--text-2); transition: all .15s ease;
+}
+.segmented button[aria-pressed="true"] { background: var(--surface-hover); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.segmented button span { color: var(--text-3); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.icon-btn {
+    width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer;
+    border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+    backdrop-filter: blur(12px); transition: all .15s ease;
+}
+.icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.icon-btn.sweep { width: auto; padding: 0 12px; gap: 6px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.icon-btn[hidden], .review[hidden] { display: none; }
+.icon-btn.purge:hover { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+.icon-btn.spinning svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+.pr {
+    position: relative; display: grid; grid-template-columns: 40px 1fr auto; gap: 16px; align-items: center;
+    padding: 16px 16px 16px 18px; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+    transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease, background .2s ease, border-color .2s ease;
+    animation: rise .45s cubic-bezier(.2,.8,.2,1) both;
+}
+.pr:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); background: var(--surface-hover); border-color: var(--border-strong); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); object-fit: cover; box-shadow: 0 0 0 2px var(--surface-hover); }
+.body { min-width: 0; }
+.title {
+    display: block; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.title:hover { color: var(--accent-text); }
+.title::after { content: ""; position: absolute; inset: 0; border-radius: 16px; }
+.meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
+.meta .num { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--text-2); }
+.meta .diff { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
+.meta .add { color: var(--green); }
+.meta .del { color: var(--red); }
+.dot-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); opacity: .5; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; letter-spacing: .01em; }
+.chip.you { background: var(--accent-soft); color: var(--accent-text); }
+.chip.team { background: var(--team-soft); color: var(--team-text); }
+.chip.draft { background: transparent; border: 1px dashed var(--border-strong); color: var(--text-3); font-weight: 500; }
+.checks { display: inline-flex; align-items: center; gap: 5px; }
+.checks i { width: 7px; height: 7px; border-radius: 50%; }
+.checks.success i { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent); }
+.checks.failure i, .checks.error i { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
+.checks.pending i, .checks.expected i { background: var(--amber); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+.review {
+    position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    padding: 9px 15px 9px 13px; border-radius: 11px; border: 0; cursor: pointer;
+    font-size: 13.5px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 6px 16px rgba(109, 94, 252, 0.3);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.review:hover { transform: translateY(-1px); box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 10px 24px rgba(109, 94, 252, 0.42); }
+.review:active { transform: translateY(0) scale(.98); }
+.review:focus-visible, .segmented button:focus-visible, .icon-btn:focus-visible, .title:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.review svg { transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.review:hover svg { transform: rotate(72deg) scale(1.1); }
+.review[disabled] { cursor: default; filter: saturate(.3); opacity: .55; box-shadow: none; transform: none; }
+.review-all { height: 38px; padding: 0 15px 0 13px; border-radius: 12px; }
+.review-all .n { font-variant-numeric: tabular-nums; opacity: .75; font-weight: 500; }
+.review.resume {
+    color: var(--accent-text); background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.review.resume:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), 0 8px 20px rgba(109, 94, 252, 0.16); }
+.review.resume:hover svg { transform: translateX(2px); }
+.chip.session { background: transparent; color: var(--text-2); font-weight: 500; padding-left: 0; }
+.chip.session i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.review.launched { background: var(--green); box-shadow: 0 6px 16px color-mix(in srgb, var(--green) 35%, transparent); }
+.review.chat { background: linear-gradient(135deg, #12a87a, #2fc79a); box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 6px 16px rgba(31, 157, 99, .3); }
+.review.chat:hover svg { transform: scale(1.12); }
+.chip.reply { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.group-label { display: flex; align-items: center; gap: 8px; margin: 6px 2px -2px; font-size: 12px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--text-3); }
+.group-label .n { color: var(--green); }
+.chip.queued { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
+.chip.merged { background: color-mix(in srgb, #8957e5 16%, transparent); color: #8957e5; }
+.chip.closed { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.chip.muted { background: transparent; color: var(--text-3); font-weight: 500; }
+.views { display: inline-flex; gap: 4px; margin-bottom: 28px; padding: 4px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); backdrop-filter: blur(12px); }
+.views button { border: 0; background: transparent; cursor: pointer; padding: 7px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.views button[aria-selected="true"] { background: var(--surface-hover); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.views button span { margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--text-3); font-weight: 500; }
+.views button.attn span { color: var(--red); font-weight: 700; }
+.views button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toolbar[hidden] { display: none; }
+.chip.ok { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.chip.bad { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.review.fixci { background: linear-gradient(135deg, #e0574f, #f08a4b); box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 6px 16px rgba(216, 74, 74, .28); }
+.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.stat { min-height: 96px; padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(16px); }
+.stat-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.stat-main { margin-top: 4px; font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.stat-main span { margin-left: 8px; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--text-3); }
+.stat-sub { display: flex; gap: 14px; font-size: 13px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.stat-sub i { font-style: normal; font-weight: 500; color: var(--text-3); }
+@media (max-width: 600px) { .stats-row { grid-template-columns: 1fr; } }
+.bench { margin-bottom: 14px; padding: 12px 16px 10px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.bench table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.bench th, .bench td { padding: 5px 6px; text-align: right; }
+.bench th:first-child { text-align: left; }
+.bench thead th { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.bench tbody th { font-weight: 500; color: var(--text-2); }
+.bench td { color: var(--text-3); }
+.bench td.me { color: var(--text); font-weight: 700; }
+.bench td.rank { color: var(--accent-text); font-weight: 600; }
+.bench-note { margin: 6px 6px 0; font-size: 12px; color: var(--text-3); }
+.review.resume.hl { color: #fff; background: linear-gradient(135deg, #12a87a, #2fc79a);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent), 0 6px 16px rgba(31, 157, 99, .3); }
+.review.resume.hl:hover { box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 30%, transparent), 0 10px 24px rgba(31, 157, 99, .38); }
+.btns { position: relative; z-index: 1; display: flex; gap: 8px; }
+.chip.rerev { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.chip.changed { background: var(--accent-soft); color: var(--accent-text); }
+.chip.failing { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.pr.fail { border-color: color-mix(in srgb, var(--red) 45%, transparent); box-shadow: inset 4px 0 0 var(--red), var(--shadow); }
+.chip.approved { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.group-label.fold { width: 100%; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; margin-top: 22px; }
+.group-label.fold:hover { color: var(--text-2); }
+.group-label.fold .n { color: var(--accent-text); }
+.group-label.fold svg { transition: transform .2s; }
+.group-label.fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.pr.done-pr { opacity: .62; }
+.pr.done-pr:hover { opacity: 1; }
+.group-label + .group-label, .pr + .group-label { margin-top: 22px; }
+
+.state { text-align: center; padding: 80px 24px; color: var(--text-2); }
+.state h2 { margin: 18px 0 6px; font-size: 20px; letter-spacing: -0.02em; color: var(--text); }
+.state p { margin: 0; }
+.state .badge {
+    width: 72px; height: 72px; margin: 0 auto; border-radius: 22px; display: grid; place-items: center; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 16px 40px rgba(109, 94, 252, 0.35);
+}
+.state.error .badge { background: linear-gradient(135deg, #ff6b6b, #ff9a5c); box-shadow: 0 16px 40px rgba(255, 107, 107, 0.3); }
+.state code { font-family: "JetBrains Mono", monospace; font-size: 12px; background: var(--surface); padding: 2px 6px; border-radius: 6px; }
+
+.skeleton { height: 76px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; position: relative; }
+.skeleton::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 5%, transparent), transparent);
+    animation: shimmer 1.3s infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+footer { margin-top: 28px; text-align: center; font-size: 12.5px; color: var(--text-3); }
+.rate { font-variant-numeric: tabular-nums; }
+.rate.low { color: var(--red); font-weight: 600; }
+kbd { font-family: "JetBrains Mono", monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-strong); background: var(--surface); }
+
+.toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 500;
+    background: var(--text); color: var(--bg); box-shadow: 0 12px 32px rgba(0,0,0,.25);
+    transition: all .3s cubic-bezier(.2,.8,.2,1);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.picker { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px 16px;
+    background: rgba(10, 8, 20, .38); backdrop-filter: blur(4px); }
+.picker[hidden] { display: none; }
+.pk-card { width: min(560px, 100%); max-height: min(640px, 100%); display: flex; flex-direction: column; border-radius: 18px;
+    background: var(--surface-hover); border: 1px solid var(--border-strong); box-shadow: 0 24px 64px rgba(0, 0, 0, .3); }
+.pk-head { display: flex; align-items: baseline; gap: 12px; padding: 20px 22px 0; }
+.pk-head h2 { flex: 1; margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+.pk-link { border: 0; background: none; cursor: pointer; color: var(--accent-text); font-weight: 600; font-size: 13px; padding: 0; }
+.pk-note { margin: 4px 22px 12px; font-size: 13px; color: var(--text-3); }
+.pk-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 10px; border-block: 1px solid var(--border); }
+.pk-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+.pk-item:hover { background: var(--accent-soft); }
+.pk-item input { flex: none; width: 17px; height: 17px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.pk-text { min-width: 0; display: flex; flex-direction: column; }
+.pk-name { font-weight: 550; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-meta { font-size: 12px; color: var(--text-3); font-family: "JetBrains Mono", ui-monospace, monospace; }
+.pk-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; }
+.pk-btn { height: 36px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+    font-weight: 600; font-size: 13.5px; color: var(--text-2); }
+.pk-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.pk-btn.primary { border: 0; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.pk-btn.primary.danger { background: var(--red); }
+.pk-btn.primary:hover { filter: brightness(1.08); }
+.pk-btn[disabled] { opacity: .45; cursor: default; filter: none; }
+.pk-link:focus-visible, .pk-btn:focus-visible, .pk-item input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 600px) {
+    .wrap { padding: 40px 16px 64px; }
+    h1 { font-size: 32px; }
+    .pr { grid-template-columns: 32px 1fr; gap: 12px; }
+    .avatar { width: 32px; height: 32px; }
+    .review { grid-column: 1 / -1; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <nav class="views" role="tablist" aria-label="View">
+        <button role="tab" data-view="reviews" aria-selected="true">Reviews</button>
+        <button role="tab" data-view="mine" aria-selected="false">My PRs<span id="n-mine"></span></button>
+    </nav>
+    <header>
+        <div>
+            <div class="eyebrow" id="viewer">Pull requests</div>
+            <h1>Review inbox<span class="count" id="count" hidden></span></h1>
+            <p class="sub" id="sub">Waiting on you and your teams.</p>
+        </div>
+        <div class="toolbar">
+            <div class="segmented" role="group" aria-label="Filter">
+                <button data-filter="all" aria-pressed="true">All<span id="n-all"></span></button>
+                <button data-filter="you" aria-pressed="false">You<span id="n-you"></span></button>
+                <button data-filter="team" aria-pressed="false">Teams<span id="n-team"></span></button>
+            </div>
+            <button class="icon-btn sweep" id="sweep" hidden></button>
+            <button class="icon-btn sweep purge" id="purge" hidden></button>
+            <button class="review review-all chat" id="recheckAll" hidden></button>
+            <button class="review review-all" id="reviewAll" disabled></button>
+            <button class="icon-btn" id="refresh" title="Refresh (R)" aria-label="Refresh">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="list" id="list" aria-live="polite">
+        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </main>
+
+    <footer id="footer"></footer>
+</div>
+<div class="picker" id="picker" hidden>
+    <div class="pk-card" role="dialog" aria-modal="true" aria-labelledby="pk-title">
+        <div class="pk-head"><h2 id="pk-title"></h2><button class="pk-link" id="pk-all" type="button">Select none</button></div>
+        <p class="pk-note" id="pk-note"></p>
+        <div class="pk-list" id="pk-list"></div>
+        <div class="pk-foot">
+            <button class="pk-btn" id="pk-cancel" type="button">Cancel</button>
+            <button class="pk-btn primary" id="pk-go" type="button"></button>
+        </div>
+    </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const SPARK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c.4 0 .7.3.8.7l1.1 4.6c.3 1.3 1.3 2.3 2.6 2.6l4.6 1.1c.4.1.7.4.7.8s-.3.7-.7.8l-4.6 1.1c-1.3.3-2.3 1.3-2.6 2.6l-1.1 4.6c-.1.4-.4.7-.8.7s-.7-.3-.8-.7l-1.1-4.6c-.3-1.3-1.3-2.3-2.6-2.6l-4.6-1.1c-.4-.1-.7-.4-.7-.8s.3-.7.7-.8l4.6-1.1c1.3-.3 2.3-1.3 2.6-2.6l1.1-4.6c.1-.4.4-.7.8-.7z"/></svg>';
+const RESUME = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>';
+const CHAT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg>';
+const BOX = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>';
+const TRASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>';
+const RECHECK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>';
+const CHECK ='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+let data = null;
+let shownPrs = [];
+let filter = 'all';
+try { filter = localStorage.getItem('pr-inbox-filter') || 'all'; } catch {}
+let view = 'reviews';
+try { view = localStorage.getItem('pr-inbox-view') || 'reviews'; } catch {}
+const WRENCH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+
+let stats = null;
+let statsLoading = false;
+async function loadStats() {
+    if (statsLoading || (stats && Date.now() - stats.loadedAt < (stats.benchmark?.computing ? 20_000 : 5 * 60_000))) return;
+    statsLoading = true;
+    try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+            stats = { ...(await res.json()), loadedAt: Date.now() };
+            if (view === 'mine') render();
+        }
+    } catch {}
+    statsLoading = false;
+}
+
+function statsBlock() {
+    if (!stats) return '<div class="stats-row"><div class="stat skeleton"></div><div class="stat skeleton"></div><div class="stat skeleton"></div></div>';
+    const p = stats.periods;
+    const card = (label, key, tip) => `<div class="stat" title="${tip}">
+        <div class="stat-label">${label}</div>
+        <div class="stat-main">${stats[key].month}<span>last ${p.month} days</span></div>
+        <div class="stat-sub"><span>${stats[key].week} <i>${p.week}d</i></span><span>${stats[key].quarter} <i>${p.quarter}d</i></span></div>
+    </div>`;
+    return `<div class="stats-row" title="Updated ${new Date(stats.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}, refreshed every 30 minutes">
+        ${card('Created', 'created', 'PRs you opened')}
+        ${card('Merged', 'merged', 'Your PRs that were merged')}
+        ${card('Reviewed', 'reviewed', 'Other people’s PRs you submitted a review on')}
+    </div>${benchBlock(stats.benchmark)}`;
+}
+
+function fmtHours(h) {
+    if (h === null || h === undefined) return '–';
+    if (h < 1) return `${Math.round(h * 60)} min`;
+    if (h < 48) return `${h < 10 ? h.toFixed(1) : Math.round(h)} h`;
+    return `${Math.round(h / 24)} days`;
+}
+
+function benchBlock(b) {
+    if (!b?.summary) return b?.computing ? '<div class="bench"><p class="bench-note">Comparing you with your team… this runs once a day.</p></div>' : '';
+    const s = b.summary;
+    const tr = (label, key, fmt = (v) => v ?? '–', tip = '') => `<tr title="${tip}"><th>${label}</th><td class="me">${fmt(s[key].me)}</td><td>${fmt(s[key].median)}</td><td class="rank">${s[key].rank ? `#${s[key].rank} of ${s[key].of}` : '–'}</td></tr>`;
+    return `<div class="bench">
+        <table>
+            <thead><tr><th>vs ${esc(b.team.split('/')[1])}, last ${b.days} days</th><th>You</th><th>Team median</th><th>Rank</th></tr></thead>
+            <tbody>
+                ${tr('Created', 'created')}
+                ${tr('Merged', 'merged')}
+                ${tr('Reviewed', 'reviewed')}
+                ${tr('Time to first review', 'firstReviewHours', fmtHours, 'Median time from a review request to the first review; rank 1 is fastest')}
+            </tbody>
+        </table>
+        <p class="bench-note">Active members of ${esc(b.team)} only. Updated ${new Date(b.at).toLocaleString([], { hourCycle: 'h23' })}, refreshed once a day.</p>
+    </div>`;
+}
+
+function mineRow(pr, i) {
+    const repo = repoLabel(pr.repo);
+    const failing = pr.checks === 'FAILURE' || pr.checks === 'ERROR';
+    const state = pr.isDraft ? '<span class="chip draft">Draft</span>'
+        : pr.queue ? statusChip('queued', pr.queue)
+        : pr.reviewDecision === 'CHANGES_REQUESTED' ? `<span class="chip bad" title="${esc(pr.changesBy.map((r) => r.login).join(', '))}">Changes requested</span>`
+        : pr.reviewDecision === 'APPROVED' ? `<span class="chip ok" title="${esc(pr.approvedBy.map((r) => r.login).join(', '))}">Approved</span>`
+        : '<span class="chip muted">Review required</span>';
+    const checks = pr.checks && !failing ? `<span class="checks ${pr.checks.toLowerCase()}" title="Checks: ${pr.checks.toLowerCase()}"><i></i></span>` : '';
+    const lead = pr.changesBy[0] ?? pr.approvedBy[0];
+    const buttons = [];
+    if (pr.awaitingMe) buttons.push(`<button class="review chat" data-mine="address" data-repo="${esc(pr.repo)}" data-number="${pr.number}" ${pr.localClone ? '' : 'disabled'}
+        title="Run /address-pr-comments on the ${pr.awaitingMe} unresolved thread${pr.awaitingMe === 1 ? '' : 's'} waiting on you${pr.session ? ', in your session' : ''}">${CHAT}<span>Address</span></button>`);
+    if (failing) buttons.push(`<button class="review fixci" data-mine="fixci" data-repo="${esc(pr.repo)}" data-number="${pr.number}" ${pr.localClone ? '' : 'disabled'}
+        title="Find out why CI fails and fix it${pr.session ? ', in your session' : ''}. Nothing is pushed without asking you">${WRENCH}<span>Fix CI</span></button>`);
+    if (pr.session) buttons.push(`<button class="review resume" data-mine="open" data-repo="${esc(pr.repo)}" data-number="${pr.number}"
+        title="Open ${pr.session.title ? `&quot;${esc(pr.session.title)}&quot;` : 'your session'} (active ${ago(pr.session.lastActive)})">${buttonContent(pr)}</button>`);
+    return `
+    <article class="pr${failing ? ' fail' : ''}" style="animation-delay:${Math.min(i, 12) * 35}ms">
+        ${lead ? `<img class="avatar" src="${esc(lead.avatarUrl)}&s=80" alt="" title="${esc(lead.login)}" loading="lazy">` : '<span class="avatar" aria-hidden="true"></span>'}
+        <div class="body">
+            <a class="title" href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>
+            <div class="meta">
+                ${state}
+                ${failing ? '<span class="chip failing">Checks failing</span>' : ''}
+                ${pr.mergeable === 'CONFLICTING' ? '<span class="chip bad" title="Merge conflicts with the base branch">Conflicts</span>' : ''}
+                ${pr.awaitingMe ? `<span class="chip reply" title="Unresolved threads where the last word is not yours">${pr.awaitingMe} to answer</span>` : ''}
+                <span class="num">${repo ? esc(repo) + ' ' : ''}#${pr.number}</span>
+                ${pr.approvedBy.length ? `<span class="ok" title="${esc(pr.approvedBy.map((a) => a.login).join(', '))}">✓ ${pr.approvedBy.length}</span>` : ''}
+                ${pr.waitingOn.length ? `<span title="Waiting on ${esc(pr.waitingOn.join(', '))}">Waiting on ${esc(pr.waitingOn.slice(0, 2).join(', '))}${pr.waitingOn.length > 2 ? ` +${pr.waitingOn.length - 2}` : ''}</span>` : ''}
+                <span class="dot-sep"></span>
+                <span title="Updated ${new Date(pr.updatedAt).toLocaleString()}">${ago(pr.updatedAt)}</span>
+                <span class="dot-sep"></span>
+                <span class="diff"><span class="add">+${pr.additions}</span> <span class="del">−${pr.deletions}</span></span>
+                ${checks}
+                ${pr.session ? `<span class="chip session"><i></i>Session ${ago(pr.session.lastActive)}</span>` : ''}
+            </div>
+        </div>
+        <div class="btns">${buttons.join('')}</div>
+    </article>`;
+}
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+function ago(iso) {
+    const s = (Date.now() - new Date(iso)) / 1000;
+    const units = [[31536000, 'y'], [2592000, 'mo'], [604800, 'w'], [86400, 'd'], [3600, 'h'], [60, 'm']];
+    for (const [n, u] of units) if (s >= n) return `${Math.floor(s / n)}${u} ago`;
+    return 'just now';
+}
+
+function repoLabel(repo) {
+    const [owner, name] = repo.split('/');
+    return repo.toLowerCase() === data?.homeRepo ? null : name;
+}
+
+function row(pr, i) {
+    const reason = pr.direct
+        ? '<span class="chip you">You</span>'
+        : pr.viaTeams.map((t) => `<span class="chip team">${esc(t)}</span>`).join('');
+    const checks = pr.checks
+        ? `<span class="checks ${pr.checks.toLowerCase()}" title="Checks: ${pr.checks.toLowerCase()}"><i></i></span>`
+        : '';
+    const repo = repoLabel(pr.repo);
+    const canLaunch = !!pr.localClone || !!pr.session;
+    const buttonTitle = pr.session
+        ? `Open ${pr.session.title ? `"${pr.session.title}"` : 'your session'} in Claude (active ${ago(pr.session.lastActive)})`
+        : canLaunch ? `Open Claude with a review of #${pr.number} ready in ${pr.localClone}` : `No local clone of ${pr.repo} found`;
+    return `
+    <article class="pr" style="animation-delay:${Math.min(i, 12) * 35}ms">
+        <img class="avatar" src="${esc(pr.author?.avatarUrl ?? '')}&s=80" alt="" loading="lazy">
+        <div class="body">
+            <a class="title" href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>
+            <div class="meta">
+                ${reason}
+                ${pr.rereview ? rereviewChip(pr.rereview) : ''}
+                ${pr.queue ? statusChip('queued', pr.queue) : ''}
+                ${pr.isDraft ? '<span class="chip draft">Draft</span>' : ''}
+                <span class="num">${repo ? esc(repo) + ' ' : ''}#${pr.number}</span>
+                <span>${esc(pr.author?.login ?? 'ghost')}</span>
+                <span class="dot-sep"></span>
+                <span title="Opened ${new Date(pr.createdAt).toLocaleString()}">${ago(pr.createdAt)}</span>
+                <span class="dot-sep"></span>
+                <span class="diff"><span class="add">+${pr.additions}</span> <span class="del">−${pr.deletions}</span></span>
+                ${checks}
+                ${pr.session ? `<span class="chip session"><i></i>Session ${ago(pr.session.lastActive)}</span>` : ''}
+            </div>
+        </div>
+        <div class="btns">
+            ${pr.rereview && !pr.session ? recheckButton(pr, 'your review was requested again') : ''}
+            <button class="review${pr.session ? ' resume' : ''}${pr.rereview && pr.session ? ' hl' : ''}" data-repo="${esc(pr.repo)}" data-number="${pr.number}"
+                ${canLaunch ? '' : 'disabled'} title="${esc(pr.rereview && pr.session ? `Needs a re-check: your review was requested again. ${buttonTitle} and ask it to re-check` : buttonTitle)}">
+                ${buttonContent(pr)}
+            </button>
+        </div>
+    </article>`;
+}
+
+function rereviewChip(rr, label = 'Re-review') {
+    const what = rr.rewritten || rr.commits === null ? 'branch rewritten'
+        : rr.commits === 0 && rr.merges > 0 ? 'only master merged in'
+        : rr.commits === 0 ? 'no new commits'
+        : `+${rr.commits} commit${rr.commits === 1 ? '' : 's'}`;
+    const before = rr.previous === 'approved' ? 'You approved' : rr.previous === 'changes' ? 'You requested changes' : 'You reviewed';
+    return `<span class="chip rerev" title="${before} ${new Date(rr.reviewedAt).toLocaleString()}">${label} · ${what}</span>`;
+}
+
+function replyRow(r, i) {
+    const repo = repoLabel(r.repo);
+    const from = r.from.length > 2 ? `${r.from.slice(0, 2).map(esc).join(', ')} +${r.from.length - 2}` : r.from.map(esc).join(', ');
+    const why = `${r.count === 1 ? 'a reply' : `${r.count} replies`} to you in your threads or mentions`;
+    const button = !r.actionable ? '<span></span>'
+        : r.session
+            ? `<button class="review resume hl" data-repo="${esc(r.repo)}" data-number="${r.number}"
+                title="${esc(`Needs a re-check: ${why}. Open your session (active ${ago(r.session.lastActive)}) and ask it to re-check`)}"><span>Open session</span>${RESUME}</button>`
+            : recheckButton({ ...r, localClone: true }, why);
+    return `
+    <article class="pr${r.actionable ? '' : ' done-pr'}" style="animation-delay:${Math.min(i, 12) * 35}ms">
+        <img class="avatar" src="${esc(r.last.avatarUrl ?? '')}&s=80" alt="" loading="lazy">
+        <div class="body">
+            <a class="title" href="${esc(r.last.url ?? r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>
+            <div class="meta">
+                ${statusChip(r.status, r.queue)}
+                <span class="chip ${r.actionable ? 'reply' : 'muted'}">${r.count} new ${r.count === 1 ? 'reply' : 'replies'}</span>
+                <span class="num">${repo ? esc(repo) + ' ' : ''}#${r.number}</span>
+                <span>${from}</span>
+                <span class="dot-sep"></span>
+                <span title="${new Date(r.last.at).toLocaleString()}">${ago(r.last.at)}</span>
+            </div>
+        </div>
+        ${button}
+    </article>`;
+}
+
+function changedChip(since) {
+    if (!since?.changed || since.commits === 0) return '';
+    const label = since.commits === null ? 'Changed since approval' : `+${since.commits} commit${since.commits === 1 ? '' : 's'} since approval`;
+    const tip = since.commits === null
+        ? 'The branch was rewritten (force-push or rebase) since you approved'
+        : `${since.commits} new commit${since.commits === 1 ? '' : 's'} since you approved, merge commits not counted`;
+    return `<span class="chip changed" title="${tip}">${label}</span>`;
+}
+
+function recheckButton(pr, why) {
+    return `<button class="review chat" data-recheck="1" data-repo="${esc(pr.repo)}" data-number="${pr.number}" ${pr.localClone ? '' : 'disabled'}
+        title="${esc(`Re-check #${pr.number}: ${why}. Runs in your first review session when there is one, deals with replies to you first, then approves if nothing blocking is found`)}">
+        ${RECHECK}<span>Re-check</span></button>`;
+}
+
+function recheckTargets() {
+    if (!data) return [];
+    const list = [
+        ...data.prs.filter((p) => p.rereview && p.localClone),
+        ...(data.dismissed ?? []).filter((p) => p.localClone),
+        ...(data.approved ?? []).filter((p) => p.localClone && p.sinceApproval?.changed && p.sinceApproval.commits !== 0),
+        ...(data.replies ?? []).filter((r) => r.actionable),
+    ];
+    const seen = new Set();
+    return list.filter((p) => {
+        const key = `${p.repo.toLowerCase()}#${p.number}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).map((p) => ({ repo: p.repo, number: p.number }));
+}
+
+function approvedRow(pr, i, dismissed = false) {
+    const checks = pr.checks
+        ? `<span class="checks ${pr.checks.toLowerCase()}" title="Checks: ${pr.checks.toLowerCase()}"><i></i></span>`
+        : '';
+    const repo = repoLabel(pr.repo);
+    const canLaunch = !!pr.localClone || !!pr.session;
+    const buttonTitle = pr.session
+        ? `Open ${pr.session.title ? `"${pr.session.title}"` : 'your session'} in Claude (active ${ago(pr.session.lastActive)})`
+        : canLaunch ? `Open Claude with a new review of #${pr.number} ready in ${pr.localClone}` : `No local clone of ${pr.repo} found`;
+    const failing = pr.checks === 'FAILURE' || pr.checks === 'ERROR';
+    const changed = pr.sinceApproval?.changed && pr.sinceApproval.commits !== 0;
+    const why = dismissed ? 'your approval was dismissed by new commits' : changed ? 'new commits since your approval' : null;
+    const recheck = why && !pr.session ? recheckButton(pr, why) : '';
+    const hl = why && pr.session;
+    return `
+    <article class="pr${failing ? ' fail' : ''}" style="animation-delay:${Math.min(i, 12) * 35}ms">
+        <img class="avatar" src="${esc(pr.author?.avatarUrl ?? '')}&s=80" alt="" loading="lazy">
+        <div class="body">
+            <a class="title" href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>
+            <div class="meta">
+                ${dismissed
+                    ? rereviewChip(pr.review, 'Approval dismissed')
+                    : `<span class="chip approved" title="You approved ${new Date(pr.approvedAt).toLocaleString()}">✓ Approved ${ago(pr.approvedAt)}</span>${changedChip(pr.sinceApproval)}`}
+                ${failing ? `<span class="chip failing" title="${pr.queue ? 'The merge queue will drop this PR' : 'Checks are failing'}">Checks failing</span>` : ''}
+                ${pr.queue ? statusChip('queued', pr.queue) : ''}
+                ${pr.isDraft ? '<span class="chip draft">Draft</span>' : ''}
+                <span class="num">${repo ? esc(repo) + ' ' : ''}#${pr.number}</span>
+                <span>${esc(pr.author?.login ?? 'ghost')}</span>
+                <span class="dot-sep"></span>
+                <span class="diff"><span class="add">+${pr.additions}</span> <span class="del">−${pr.deletions}</span></span>
+                ${checks}
+                ${pr.session ? `<span class="chip session"><i></i>Session ${ago(pr.session.lastActive)}</span>` : ''}
+            </div>
+        </div>
+        <div class="btns">
+            ${recheck}
+            <button class="review${pr.session ? ' resume' : ''}${hl ? ' hl' : ''}" data-repo="${esc(pr.repo)}" data-number="${pr.number}"
+                ${canLaunch ? '' : 'disabled'} title="${esc(hl ? `Needs a re-check: ${why}. ${buttonTitle} and ask it to re-check` : buttonTitle)}">
+                ${buttonContent(pr)}
+            </button>
+        </div>
+    </article>`;
+}
+
+function statusChip(status, queue) {
+    if (status === 'queued') return `<span class="chip queued" title="In the merge queue${queue?.position ? `, position ${queue.position}` : ''}">Queued${queue?.position ? ` · ${queue.position}` : ''}</span>`;
+    if (status === 'merged') return '<span class="chip merged">Merged</span>';
+    if (status === 'closed') return '<span class="chip closed">Closed</span>';
+    if (status === 'draft') return '<span class="chip draft">Draft</span>';
+    return '';
+}
+
+function buttonContent(pr) {
+    return pr.session ? `<span>Open session</span>${RESUME}` : `${SPARK}<span>Review</span>`;
+}
+
+function render() {
+    document.querySelectorAll('.segmented button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.filter === filter)));
+    document.querySelectorAll('.views button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === view)));
+    document.querySelector('.toolbar').hidden = view === 'mine';
+    document.querySelector('h1').firstChild.textContent = view === 'mine' ? 'My PRs' : 'Review inbox';
+    $('sub').textContent = view === 'mine' ? 'Your open pull requests and what they are waiting on.' : 'Waiting on you and your teams.';
+    if (!data) return;
+    const mine = data.mine ?? [];
+    const mineAttn = mine.filter((p) => p.awaitingMe || p.checks === 'FAILURE' || p.checks === 'ERROR' || p.mergeable === 'CONFLICTING').length;
+    $('n-mine').textContent = mineAttn || mine.length;
+    document.querySelector('.views [data-view="mine"]').classList.toggle('attn', mineAttn > 0);
+    document.querySelector('.views [data-view="mine"]').title = `${mine.length} open PR${mine.length === 1 ? '' : 's'}${mineAttn ? `, ${mineAttn} need${mineAttn === 1 ? 's' : ''} you` : ''}`;
+    const all = data.prs;
+    const you = all.filter((p) => p.direct);
+    const team = all.filter((p) => !p.direct);
+    $('n-all').textContent = all.length;
+    $('n-you').textContent = you.length;
+    $('n-team').textContent = team.length;
+    $('count').hidden = all.length === 0;
+    $('count').textContent = all.length;
+    const replies = data.replies ?? [];
+    const open = replies.filter((r) => r.actionable);
+    const replyCount = open.reduce((n, r) => n + r.count, 0);
+    const finished = data.finished ?? [];
+    const sweep = $('sweep');
+    if (!sweep.classList.contains('launched')) {
+        sweep.hidden = finished.length === 0;
+        sweep.innerHTML = `${BOX}<span>Archive ${finished.length}</span>`;
+        sweep.title = `Archive ${finished.length} Claude session${finished.length === 1 ? '' : 's'} whose PR is merged or closed: `
+            + finished.slice(0, 8).map((s) => `#${s.number}`).join(', ') + (finished.length > 8 ? ' …' : '');
+    }
+    const old = data.oldArchived ?? [];
+    const purge = $('purge');
+    if (!purge.classList.contains('launched')) {
+        purge.hidden = old.length === 0;
+        purge.innerHTML = `${TRASH}<span>Delete ${old.length} old</span>`;
+        purge.title = `Permanently delete ${old.length} archived session${old.length === 1 ? '' : 's'} not used for ${data.deleteAfterDays ?? 14} days. `
+            + 'Opens Claude with the list first; this cannot be undone';
+    }
+    const pending = all.length + open.length + (data.dismissed ?? []).length;
+    document.title = pending ? `(${pending}) Review Inbox` : 'Review Inbox';
+
+    const shown = filter === 'you' ? you : filter === 'team' ? team : all;
+    shownPrs = shown;
+    const allBtn = $('reviewAll');
+    if (!allBtn.classList.contains('launched')) {
+        const fresh = shown.filter((p) => !p.session);
+        allBtn.innerHTML = `${SPARK}<span>Review new</span><span class="n">${fresh.length}</span>`;
+        allBtn.disabled = fresh.length === 0;
+        allBtn.title = fresh.length
+            ? `Start parallel reviews of the ${fresh.length} PR${fresh.length === 1 ? '' : 's'} listed here that have no session yet`
+            : 'Every PR here already has a session';
+    }
+    const rcBtn = $('recheckAll');
+    if (!rcBtn.classList.contains('launched')) {
+        const targets = recheckTargets();
+        rcBtn.hidden = targets.length === 0;
+        rcBtn.innerHTML = `${RECHECK}<span>Re-check all</span><span class="n">${targets.length}</span>`;
+        rcBtn.title = `Start parallel re-checks of ${targets.map((t) => `#${t.number}`).join(', ')}. Each deals with replies to you first, then approves if nothing blocking is found`;
+    }
+    const replyBlock = replies.length
+        ? `<div class="group-label">Replies to your comments <span class="n">${replyCount}</span></div>${replies.map(replyRow).join('')}`
+        : '';
+    const approved = data.approved ?? [];
+    let approvedOpen = true;
+    try { approvedOpen = localStorage.getItem('pr-inbox-approved-open') !== '0'; } catch {}
+    const approvedBlock = approved.length
+        ? `<button class="group-label fold" id="foldApproved" aria-expanded="${approvedOpen}">Approved by you, not merged <span class="n">${approved.length}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>`
+            + (approvedOpen ? approved.map((pr, i) => approvedRow(pr, i + replies.length + shown.length)).join('') : '')
+        : '';
+    const dismissed = data.dismissed ?? [];
+    const dismissedBlock = dismissed.length
+        ? `<div class="group-label" title="Your approval was dismissed by new commits, but your review was not requested again">Needs re-check <span class="n">${dismissed.length}</span></div>`
+            + dismissed.map((pr, i) => approvedRow(pr, i + replies.length + shown.length, true)).join('')
+        : '';
+    const empty = `<div class="state"><div class="badge">${CHECK.replace('15', '34').replace('15', '34')}</div>
+            <h2>Inbox zero</h2><p>Nothing is waiting for your review${filter === 'all' ? '' : ' here'}. Enjoy it.</p></div>`;
+    $('count').hidden = view === 'mine' ? mine.length === 0 : $('count').hidden;
+    if (view === 'mine') $('count').textContent = mine.length;
+    if (view === 'mine') loadStats();
+    $('list').innerHTML = view === 'mine'
+        ? statsBlock() + (mine.length ? mine.map(mineRow).join('') : `<div class="state"><div class="badge">${CHECK.replace('15', '34').replace('15', '34')}</div><h2>No open PRs</h2><p>You have nothing open right now.</p></div>`)
+        : (shown.length || replies.length
+            ? replyBlock + (shown.length && replies.length ? '<div class="group-label">Review requests</div>' : '')
+                + shown.map((pr, i) => row(pr, i + replies.length)).join('')
+            : dismissed.length ? '' : empty) + dismissedBlock + approvedBlock;
+    const rl = data.rateLimit;
+    const rate = rl
+        ? ` · <span class="rate${rl.remaining < 500 ? ' low' : ''}" title="GitHub GraphQL points: ${rl.used.toLocaleString()} used this hour. Shared with gh and your Claude sessions">GitHub ${rl.remaining.toLocaleString()} / ${rl.limit.toLocaleString()} left, resets ${new Date(rl.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}</span>`
+        : '';
+    $('footer').innerHTML = `Updated ${new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} · refreshes every minute · <kbd>R</kbd> to refresh${rate}`;
+}
+
+async function load(force = false) {
+    const btn = $('refresh');
+    btn.classList.add('spinning');
+    try {
+        const res = await fetch(force === true ? '/api/prs?force=1' : '/api/prs');
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error);
+        data = body;
+        $('viewer').innerHTML = `<img src="${esc(body.viewerAvatar)}" alt="">${esc(body.viewer)}`;
+        render();
+    } catch (err) {
+        if (!data) {
+            $('list').innerHTML = `<div class="state error"><div class="badge">!</div><h2>Couldn't reach GitHub</h2>
+                <p>${esc(err.message)}</p><p style="margin-top:8px">Check that <code>gh auth status</code> is happy.</p></div>`;
+        } else {
+            toast('Refresh failed: ' + err.message);
+        }
+    } finally {
+        btn.classList.remove('spinning');
+    }
+}
+
+let toastTimer;
+function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+$('list').addEventListener('click', async (e) => {
+    if (e.target.closest('#foldApproved')) {
+        try { localStorage.setItem('pr-inbox-approved-open', localStorage.getItem('pr-inbox-approved-open') === '0' ? '1' : '0'); } catch {}
+        return render();
+    }
+    const btn = e.target.closest('.review');
+    if (!btn || btn.disabled) return;
+    const number = Number(btn.dataset.number);
+    btn.disabled = true;
+    if (btn.dataset.mine) {
+        try {
+            const res = await fetch('/api/review/mine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo: btn.dataset.repo, number, action: btn.dataset.mine }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(body.error);
+            btn.classList.add('launched');
+            btn.innerHTML = `${CHECK}<span>Opened</span>`;
+            toast(body.opened ? `Opened your session for #${number} in Claude`
+                : body.resumed ? `Press Enter in Claude: a relay sends the prompt to your session for #${number}, then archives itself`
+                : `#${number} is ready in Claude. Press Enter to start`);
+            setTimeout(render, 4000);
+        } catch (err) {
+            btn.disabled = false;
+            toast(err.message);
+        }
+        return;
+    }
+    if (btn.dataset.recheck) {
+        try {
+            const res = await fetch('/api/review/recheck', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo: btn.dataset.repo, number }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(body.error);
+            btn.classList.add('launched');
+            btn.innerHTML = `${CHECK}<span>Opened</span>`;
+            toast(body.resumed
+                ? `Press Enter in Claude: a relay sends the re-check to your review session for #${number}, then archives itself`
+                : `A re-check of #${number} is ready in Claude. Press Enter to start`);
+            setTimeout(render, 4000);
+            setTimeout(load, 15_000);
+        } catch (err) {
+            btn.disabled = false;
+            toast(err.message);
+        }
+        return;
+    }
+    if (btn.dataset.check) {
+        try {
+            const res = await fetch('/api/replies/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo: btn.dataset.repo, number }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(body.error);
+            btn.classList.add('launched');
+            btn.innerHTML = `${CHECK}<span>Opened</span>`;
+            toast(`Replies on #${number} are ready in Claude. Press Enter to start`);
+            data.replies = data.replies.filter((r) => !(r.repo === btn.dataset.repo && r.number === number));
+            setTimeout(render, 2500);
+        } catch (err) {
+            btn.disabled = false;
+            toast(err.message);
+        }
+        return;
+    }
+    try {
+        const res = await fetch('/api/review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repo: btn.dataset.repo, number }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error);
+        const pr = [...data.prs, ...(data.approved ?? []), ...(data.dismissed ?? [])].find((p) => p.number === number && p.repo === btn.dataset.repo);
+        btn.classList.add('launched');
+        btn.innerHTML = `${CHECK}<span>Opened</span>`;
+        toast(body.resumed ? `Opened your session for #${number} in Claude` : `Review of #${number} is ready in Claude. Press Enter to start`);
+        setTimeout(() => {
+            btn.classList.remove('launched');
+            btn.innerHTML = buttonContent(pr);
+            btn.disabled = false;
+        }, 4000);
+        if (!body.resumed) setTimeout(load, 15_000);
+    } catch (err) {
+        btn.disabled = false;
+        toast(err.message);
+    }
+});
+
+$('recheckAll').addEventListener('click', async () => {
+    const btn = $('recheckAll');
+    const prs = recheckTargets();
+    if (!prs.length) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/review/recheck-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prs }) });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error);
+        btn.classList.add('launched');
+        btn.innerHTML = `${CHECK}<span>Opened</span>`;
+        toast(`${body.count} re-checks are ready in Claude, ${body.reused} of them in the session that did the first review. Press Enter to start`);
+        setTimeout(() => { btn.classList.remove('launched'); btn.disabled = false; render(); }, 4000);
+        setTimeout(load, 20_000);
+    } catch (err) {
+        btn.disabled = false;
+        toast(err.message);
+    }
+});
+
+$('reviewAll').addEventListener('click', async () => {
+    const btn = $('reviewAll');
+    const prs = shownPrs.filter((p) => !p.session).map((p) => ({ repo: p.repo, number: p.number }));
+    if (!prs.length) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/review-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prs }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error);
+        btn.classList.add('launched');
+        btn.innerHTML = `${CHECK}<span>Opened</span>`;
+        toast(`A review of ${prs.length} new PR${prs.length === 1 ? '' : 's'} is ready in Claude. Press Enter to start`);
+        setTimeout(() => { btn.classList.remove('launched'); render(); }, 4000);
+    } catch (err) {
+        btn.disabled = false;
+        toast(err.message);
+    }
+});
+
+const PICKERS = {
+    sweep: {
+        title: 'Archive finished sessions', verb: 'Archive', endpoint: '/api/archive-finished', danger: false,
+        note: () => 'Their PRs are merged or closed. Archived sessions can be restored from the Archived list.',
+        items: () => (data?.finished ?? []).map((s) => ({ id: s.id, title: s.title, meta: `#${s.number} · ${s.state}` })),
+        done: (n) => `Archiving ${n} session${n === 1 ? '' : 's'} is ready in Claude. Press Enter to start`,
+    },
+    purge: {
+        title: 'Delete old archived sessions', verb: 'Delete', endpoint: '/api/delete-old-archived', danger: true,
+        note: () => `Archived and not used for ${data?.deleteAfterDays ?? 14} days. Deleting cannot be undone.`,
+        items: () => (data?.oldArchived ?? []).map((s) => ({ id: s.id, title: s.title || 'Untitled', meta: `last used ${ago(s.lastActive)}` })),
+        done: (n) => `Deleting ${n} session${n === 1 ? '' : 's'} is ready in Claude. Check the list, then press Enter`,
+    },
+};
+let picker = null;
+
+function openPicker(kind) {
+    const cfg = PICKERS[kind];
+    const items = cfg.items();
+    if (!items.length) return;
+    picker = { kind, cfg };
+    $('pk-title').textContent = cfg.title;
+    $('pk-note').textContent = cfg.note();
+    $('pk-list').innerHTML = items.map((it) => `<label class="pk-item">
+        <input type="checkbox" value="${esc(it.id)}" checked>
+        <span class="pk-text"><span class="pk-name" title="${esc(it.title)}">${esc(it.title)}</span><span class="pk-meta">${esc(it.meta)}</span></span>
+    </label>`).join('');
+    $('pk-go').classList.toggle('danger', cfg.danger);
+    $('picker').hidden = false;
+    updatePicker();
+    $('pk-go').focus();
+}
+
+function closePicker() {
+    $('picker').hidden = true;
+    picker = null;
+}
+
+function updatePicker() {
+    const boxes = [...$('pk-list').querySelectorAll('input')];
+    const n = boxes.filter((b) => b.checked).length;
+    $('pk-go').textContent = `${picker.cfg.verb} ${n} session${n === 1 ? '' : 's'}`;
+    $('pk-go').disabled = n === 0;
+    $('pk-all').textContent = n === boxes.length ? 'Select none' : 'Select all';
+}
+
+$('sweep').addEventListener('click', () => openPicker('sweep'));
+$('purge').addEventListener('click', () => openPicker('purge'));
+$('pk-list').addEventListener('change', updatePicker);
+$('pk-all').addEventListener('click', () => {
+    const boxes = [...$('pk-list').querySelectorAll('input')];
+    const check = !boxes.every((b) => b.checked);
+    boxes.forEach((b) => { b.checked = check; });
+    updatePicker();
+});
+$('pk-cancel').addEventListener('click', closePicker);
+$('picker').addEventListener('click', (e) => { if (e.target === $('picker')) closePicker(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && picker) closePicker(); });
+$('pk-go').addEventListener('click', async () => {
+    const { kind, cfg } = picker;
+    const ids = [...$('pk-list').querySelectorAll('input:checked')].map((b) => b.value);
+    $('pk-go').disabled = true;
+    try {
+        const res = await fetch(cfg.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error);
+        closePicker();
+        const btn = $(kind);
+        btn.classList.add('launched');
+        btn.innerHTML = `${CHECK}<span>Opened</span>`;
+        toast(cfg.done(body.count));
+        setTimeout(() => { btn.classList.remove('launched'); render(); }, 4000);
+    } catch (err) {
+        $('pk-go').disabled = false;
+        toast(err.message);
+    }
+});
+
+document.querySelector('.views').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    view = b.dataset.view;
+    try { localStorage.setItem('pr-inbox-view', view); } catch {}
+    render();
+});
+
+document.querySelector('.segmented').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    filter = b.dataset.filter;
+    try { localStorage.setItem('pr-inbox-filter', filter); } catch {}
+    render();
+});
+$('refresh').addEventListener('click', () => load(true));
+document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey && e.target === document.body) load(true);
+});
+setInterval(() => { if (!document.hidden) load(); }, 60_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && data && Date.now() - new Date(data.fetchedAt) > 60_000) load(); });
+
+render();
+load();
+</script>
+</body>
+</html>
