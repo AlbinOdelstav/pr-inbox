@@ -168,6 +168,32 @@ body.collapsed .tabs, body.collapsed main, body.collapsed .wfoot, body.collapsed
 .st.closed { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .st.draft { box-shadow: inset 0 0 0 1px var(--border); color: var(--text-3); font-weight: 600; }
 .stale .pr { opacity: .62; }
+.logo { position: relative; }
+.logo.auto-on::after { content: ""; position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 0 2px var(--bg); }
+.wfoot { align-items: center; }
+.wfoot .auto { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; color: var(--text-3); }
+.wfoot .auto i { width: 22px; height: 12px; border-radius: 999px; background: var(--border); position: relative; transition: background .15s; box-shadow: inset 0 0 0 1px var(--border); }
+.wfoot .auto i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.wfoot .auto.on { color: var(--green); }
+.wfoot .auto.on i { background: var(--green); }
+.wfoot .auto.on i::after { transform: translateX(10px); }
+.wfoot .auto.stale { color: var(--amber); }
+.wfoot .auto.stale i { background: var(--amber); }
+.wfoot .auto-wake { font-size: 10.5px; font-weight: 700; color: var(--amber); text-decoration: underline; }
+.pending { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.pending .section { color: var(--accent-text); }
+.pending .section .sendall { margin-left: auto; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--accent-text); text-transform: uppercase; }
+.pending .section .sendall:hover { text-decoration: underline; }
+.go.send { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.pending-pr.sending { background: var(--row-hover); }
+.sendmenu { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.sendmenu .sv { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border); }
+.sendmenu .sv:hover { color: var(--text); background: var(--bg-2); }
+.sendmenu .sv.sug { color: #fff; background: var(--accent); box-shadow: none; }
+.sendmenu .sv[disabled] { opacity: .5; }
+.pk-item .pk-text { flex: 1; }
+.pk-verdict { flex: none; font: inherit; font-size: 11px; padding: 1px 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); max-width: 108px; }
 .merged-dot { background: color-mix(in srgb, #8957e5 16%, transparent); color: #8957e5; }
 .pr.merged-pr .title { font-weight: 500; }
 .meta .diff { font-family: "JetBrains Mono", monospace; font-size: 10.5px; }
@@ -271,6 +297,7 @@ const BOX = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke=
 const TRASH = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>';
 const RECHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>';
 const WRENCH = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+const SEND = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
 const HEADER = 44;
 
 const $ = (id) => document.getElementById(id);
@@ -677,15 +704,66 @@ function render() {
         : '';
     const rl = data.rateLimit;
     const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-    $('wfoot').innerHTML = `<span>Updated ${hhmm(data.fetchedAt)}</span>`
-        + (rl ? `<span class="${rl.remaining < 500 ? 'low' : ''}" title="GitHub GraphQL points: ${rl.used.toLocaleString()} used this hour, shared with gh and your Claude sessions">GitHub ${rl.remaining.toLocaleString()} / ${rl.limit.toLocaleString()} · resets ${hhmm(rl.resetAt)}</span>` : '');
+    const auto = data.auto ?? { enabled: false };
+    document.querySelector('.logo').classList.toggle('auto-on', auto.enabled);
+    const autoTip = auto.enabled
+        ? `Auto is on: new review requests get a draft review automatically, and Review, New and Re-check create pending reviews instead of approving. ${auto.lastPoll ? `The dispatcher last checked at ${hhmm(auto.lastPoll)}.` : 'The dispatcher has not checked in yet.'} Click to turn off`
+        : 'Auto is off: nothing starts by itself, and reviews approve or request changes as before. Click to turn on';
+    $('wfoot').innerHTML = `<button class="auto${auto.enabled ? ' on' : ''}${auto.dispatcherStale ? ' stale' : ''}" id="autoBtn" role="switch" aria-checked="${auto.enabled}" title="${esc(autoTip)}"><i></i>Auto</button>`
+        + (auto.dispatcherStale ? '<button class="auto-wake" id="autoWake" title="The dispatcher session has not checked in for 15 minutes. Click to open a new one, then press Enter in it">Start dispatcher</button>' : '')
+        + `<span title="Last refresh">${hhmm(data.fetchedAt)}</span>`
+        + (rl ? `<span class="${rl.remaining < 500 ? 'low' : ''}" title="GitHub GraphQL points: ${rl.used.toLocaleString()} of ${rl.limit.toLocaleString()} used this hour, shared with gh and your Claude sessions. Resets ${hhmm(rl.resetAt)}">GitHub ${rl.remaining.toLocaleString()} left</span>` : '');
     if (view === 'stats') loadStats();
     $('list').innerHTML = view === 'stats'
         ? statsBody()
         : view === 'mine'
             ? (mine.some(inRepo) ? mine.filter(inRepo).map(mineRow).join('') : '<div class="empty"><b>No open PRs</b>You have nothing open right now.</div>')
                 + mergedBlock((data.merged ?? []).filter(inRepo))
-            : replyBlock + reviewBlock + dismissedBlock + approvedBlock + staleBlock;
+            : pendingBlock((data.pending ?? []).filter(inRepo)) + replyBlock + reviewBlock + dismissedBlock + approvedBlock + staleBlock;
+    notifyPending(data.pending ?? []);
+}
+
+const VERDICTS = { APPROVE: 'Approve', REQUEST_CHANGES: 'Request changes', COMMENT: 'Comment' };
+let sendOpenFor = null;
+
+function pendingRow(p) {
+    const key = `${p.repo.toLowerCase()}#${p.number}`;
+    const repo = isHome(p.repo) ? '' : esc(repoShort(p.repo)) + ' ';
+    const suggest = p.suggest ? `<span class="st ${p.suggest === 'APPROVE' ? 'ok' : p.suggest === 'REQUEST_CHANGES' ? 'closed' : 'draft'}" title="Claude suggests this verdict">${VERDICTS[p.suggest].toLowerCase()}</span>` : '';
+    const open = sendOpenFor === key;
+    const order = [p.suggest, ...Object.keys(VERDICTS)].filter((v, i, a) => v && a.indexOf(v) === i);
+    return `<div class="pr pending-pr${open ? ' sending' : ''}">
+        <img class="av" src="${esc(p.author?.avatarUrl ?? '')}&s=44" alt="">
+        <div class="body">
+            <button class="title" data-files="${esc(p.url)}" title="Open the drafted comments in Files changed">${esc(p.title)}</button>
+            <div class="meta">${suggest}<span class="num">${repo}#${p.number}</span><span>${p.comments} comment${p.comments === 1 ? '' : 's'}</span><span title="Drafted ${new Date(p.createdAt).toLocaleString()}">${ago(p.createdAt)}</span></div>
+            ${open ? `<div class="sendmenu">${order.map((v) => `<button class="sv${v === p.suggest ? ' sug' : ''}" data-submit="${v}" data-repo="${esc(p.repo)}" data-number="${p.number}">${VERDICTS[v]}</button>`).join('')}</div>` : ''}
+        </div>
+        <button class="go send" data-sendmenu="${esc(key)}" title="Submit this review: choose Approve, Request changes or Comment" aria-label="Submit the review of #${p.number}" aria-expanded="${open}">${SEND}</button>
+    </div>`;
+}
+
+function pendingBlock(list) {
+    if (!list.length) return '';
+    return `<div class="pending"><div class="section">Pending reviews <span class="n">${list.length}</span>
+        <button class="sendall" id="sendAll" title="Submit several pending reviews at once, each with a verdict you pick">Send all</button></div>
+        ${list.map(pendingRow).join('')}</div>`;
+}
+
+function notifyPending(list) {
+    let seenIds;
+    try { seenIds = JSON.parse(store.get('w-pending-seen', 'null')); } catch { seenIds = null; }
+    const ids = list.map((p) => p.id);
+    store.set('w-pending-seen', JSON.stringify(ids));
+    if (!seenIds || !('Notification' in window) || Notification.permission !== 'granted') return;
+    for (const p of list.filter((x) => !seenIds.includes(x.id))) {
+        const n = new Notification(`Review ready: #${p.number}`, {
+            body: `${p.title}\n${p.comments} comment${p.comments === 1 ? '' : 's'}${p.suggest ? ` · suggests ${VERDICTS[p.suggest].toLowerCase()}` : ''}`,
+            icon: '/widget.png',
+            tag: p.id,
+        });
+        n.onclick = () => { window.focus(); n.close(); };
+    }
 }
 
 async function load(force = false) {
@@ -720,7 +798,30 @@ function setCollapsed(collapsed, persist = true) {
 
 $('list').addEventListener('click', async (e) => {
     const title = e.target.closest('.title');
+    if (title?.dataset.files) return post('/api/open', { url: `${title.dataset.files}/files` }).catch((err) => toast(err.message));
     if (title) return post('/api/open', { url: title.dataset.url }).catch((err) => toast(err.message));
+    if (e.target.closest('#sendAll')) return openPicker('sendAll');
+    const menuBtn = e.target.closest('[data-sendmenu]');
+    if (menuBtn) {
+        sendOpenFor = sendOpenFor === menuBtn.dataset.sendmenu ? null : menuBtn.dataset.sendmenu;
+        return render();
+    }
+    const submit = e.target.closest('[data-submit]');
+    if (submit) {
+        submit.disabled = true;
+        try {
+            const r = await post('/api/review/pending/submit', { repo: submit.dataset.repo, number: Number(submit.dataset.number), event: submit.dataset.submit });
+            toast(`Sent #${submit.dataset.number}: ${VERDICTS[submit.dataset.submit].toLowerCase()} (${r.state.toLowerCase().replace('_', ' ')})`);
+            sendOpenFor = null;
+            data.pending = (data.pending ?? []).filter((p) => !(p.repo === submit.dataset.repo && p.number === Number(submit.dataset.number)));
+            render();
+            setTimeout(() => load(true), 2500);
+        } catch (err) {
+            submit.disabled = false;
+            toast(err.message);
+        }
+        return;
+    }
     if (e.target.closest('#foldApproved')) {
         store.set('w-approved-open', store.get('w-approved-open', '1') === '1' ? '0' : '1');
         return render();
@@ -784,7 +885,7 @@ $('list').addEventListener('click', async (e) => {
         const r = await post('/api/review',{ repo: btn.dataset.repo, number: Number(btn.dataset.number) });
         btn.classList.add('done');
         btn.innerHTML = CHECK;
-        toast(r.resumed ? `Opened your session for #${btn.dataset.number}` : `#${btn.dataset.number} ready in Claude. Press Enter`);
+        toast(r.resumed ? `Opened your session for #${btn.dataset.number}` : `${r.draft ? 'Draft review' : 'Review'} of #${btn.dataset.number} ready in Claude. Press Enter`);
         setTimeout(render, 3500);
     } catch (err) {
         btn.disabled = false;
@@ -823,6 +924,31 @@ $('all').addEventListener('click', async () => {
 });
 
 const PICKERS = {
+    sendAll: {
+        title: 'Send pending reviews', verb: 'Send', danger: false, verdicts: true,
+        note: 'Each review is submitted with the verdict next to it, preset to what Claude suggests. Untick any you want to keep as a draft.',
+        items: () => (data?.pending ?? []).filter(inRepo).map((p) => ({
+            id: `${p.repo}#${p.number}`,
+            title: p.title,
+            meta: `#${p.number} · ${p.comments} comment${p.comments === 1 ? '' : 's'}`,
+            verdict: p.suggest ?? 'COMMENT',
+        })),
+        run: async (chosen) => {
+            let sent = 0;
+            const failed = [];
+            for (const { id, verdict } of chosen) {
+                const [repo, number] = id.split('#');
+                try {
+                    await post('/api/review/pending/submit', { repo, number: Number(number), event: verdict });
+                    sent++;
+                } catch {
+                    failed.push(`#${number}`);
+                }
+            }
+            setTimeout(() => load(true), 2000);
+            return failed.length ? `Sent ${sent}; could not send ${failed.join(', ')}` : `Sent ${sent} review${sent === 1 ? '' : 's'}`;
+        },
+    },
     sweep: {
         title: 'Archive sessions', verb: 'Archive', endpoint: '/api/archive-finished', danger: false,
         note: 'Reviews of merged or closed PRs, and finished batch, relay and archive helpers. Helpers with live side sessions detach them first. You can restore everything from the Archived list.',
@@ -855,6 +981,7 @@ function openPicker(kind) {
     $('pk-list').innerHTML = items.map((it) => `<label class="pk-item">
         <input type="checkbox" value="${esc(it.id)}" checked>
         <span class="pk-text"><span class="pk-name" title="${esc(it.title)}">${esc(it.title)}</span><span class="pk-meta">${esc(it.meta)}</span></span>
+        ${cfg.verdicts ? `<select class="pk-verdict" aria-label="Verdict for ${esc(it.title)}">${Object.entries(VERDICTS).map(([v, label]) => `<option value="${v}"${v === it.verdict ? ' selected' : ''}>${label}</option>`).join('')}</select>` : ''}
     </label>`).join('');
     $('pk-go').classList.toggle('danger', cfg.danger);
     $('picker').hidden = false;
@@ -891,6 +1018,15 @@ $('pk-go').addEventListener('click', async () => {
     const { kind, cfg } = picker;
     const ids = [...$('pk-list').querySelectorAll('input:checked')].map((b) => b.value);
     $('pk-go').disabled = true;
+    if (cfg.run) {
+        const chosen = [...$('pk-list').querySelectorAll('.pk-item')]
+            .filter((row) => row.querySelector('input').checked)
+            .map((row) => ({ id: row.querySelector('input').value, verdict: row.querySelector('.pk-verdict').value }));
+        const message = await cfg.run(chosen);
+        closePicker();
+        toast(message);
+        return;
+    }
     try {
         const r = await post(cfg.endpoint, { ids });
         closePicker();
@@ -903,6 +1039,36 @@ $('pk-go').addEventListener('click', async () => {
         $('pk-go').disabled = false;
         toast(err.message);
     }
+});
+
+$('wfoot').addEventListener('click', async (e) => {
+    if (e.target.closest('#autoWake')) {
+        try {
+            await post('/api/review/auto/dispatcher', {});
+            toast('Dispatcher ready in Claude. Press Enter in it once');
+        } catch (err) {
+            toast(err.message);
+        }
+        return;
+    }
+    const btn = e.target.closest('#autoBtn');
+    if (!btn) return;
+    const enable = !(data?.auto?.enabled);
+    if (enable && 'Notification' in window && Notification.permission === 'default') {
+        try { await Notification.requestPermission(); } catch {}
+    }
+    btn.disabled = true;
+    try {
+        const status = await post('/api/review/auto', { enabled: enable });
+        data.auto = status;
+        render();
+        toast(enable
+            ? (status.dispatcherStale ? 'Auto is on. Press Enter in the dispatcher session that opened, once' : 'Auto is on')
+            : 'Auto is off. Reviews work as before');
+    } catch (err) {
+        toast(err.message);
+    }
+    btn.disabled = false;
 });
 
 $('repos').addEventListener('click', (e) => {

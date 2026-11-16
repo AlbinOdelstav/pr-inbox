@@ -7,6 +7,7 @@ It runs on your own machine: a Node server on `127.0.0.1:4477` talks to GitHub t
 ## What it shows
 
 **Reviews**
+- *Pending reviews*: your unsubmitted draft reviews, with the verdict Claude suggests and a Send menu (see "Draft reviews and Auto").
 - Review requests to you and your teams, with CI status, merge-queue position and whether you already have a session for the PR.
 - Replies to you in your unresolved review threads, and comments that @mention you.
 - *Needs re-check*: PRs where new commits dismissed your approval.
@@ -21,12 +22,25 @@ It runs on your own machine: a Node server on `127.0.0.1:4477` talks to GitHub t
 ## Buttons
 
 - **Review** starts a Claude Code session for one PR, or opens the session you already have for it.
-- **New N** reviews every PR without a session in parallel, one session each (drafts are left out).
+- **New N** reviews every PR without a session in parallel, one session each (drafts and queued PRs are left out).
 - **Re-check / Re-check all** looks only at what changed since your last review and approves when nothing is blocking. Re-check all sends the prompt to the session that did the first review when there is one.
 - **Address / Fix CI** (My PRs) runs `/address-pr-comments` or looks into a failing build.
 - **Archive** archives sessions whose PR is merged or closed, plus finished batch helpers. **Delete** removes archived sessions that have not been used for 14 days. Both show a checkbox list first, and run in a Claude session you confirm with Enter.
 
 The prompts use the `review-pr` and `address-pr-comments` skills. Without them in your Claude setup, Claude still gets the prompt, but works without the skill's instructions.
+
+## Draft reviews and Auto
+
+The **Auto** switch in the widget's footer decides how reviews end.
+
+- **Off** (the default): nothing starts by itself, and reviews use `review-pr`, which approves or requests changes itself.
+- **On**: reviews use `review-pr-draft`, which leaves a **pending review** on GitHub: inline comments and a summary that only you can see, with a suggested verdict. Nothing is submitted and nobody is notified. Review requests that arrive after you switch Auto on start a draft review by themselves within about five minutes, and the logo gets a green dot.
+
+Pending reviews show at the top of Reviews. The title opens "Files changed", where the drafted comments appear inline for you to edit. **Send** submits one with the verdict you pick (Approve, Request changes or Comment), and **Send all** submits several from a checkbox list. Submitting goes straight through GitHub's API and only ever happens when you click. A notification appears when a new pending review is ready.
+
+Auto needs one **dispatcher** session: switching Auto on opens it in Claude, and you press Enter in it once. It checks the server every five minutes and starts a session per new PR. If it stops checking in, the switch turns amber with a button to start a new one. Drafts, queued PRs, PRs that already have a session and PRs untouched for 30 days are never started automatically.
+
+To install the draft skill, copy `skills/review-pr-draft` into `%USERPROFILE%\.claude\skills\`.
 
 ## Requirements
 
@@ -63,4 +77,4 @@ Everything uses GitHub's GraphQL API, which allows 5,000 points an hour per user
 
 ## Files the tool writes
 
-These live next to the code and are git-ignored: `seen.json` (replies you have checked), `benchmark.json` (the team comparison), `recheck-batch.json` (the last batch of re-check prompts) and `server.log`. The widget's own Chrome profile is in `%LOCALAPPDATA%\pr-inbox-widget`.
+These live next to the code and are git-ignored: `seen.json` (replies you have checked), `benchmark.json` (the team comparison), `recheck-batch.json` (the last batch of re-check prompts), `auto.json` (the Auto switch and which PRs it has started) and `server.log`. The widget's own Chrome profile is in `%LOCALAPPDATA%\pr-inbox-widget`.

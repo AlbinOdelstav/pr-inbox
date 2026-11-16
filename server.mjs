@@ -49,6 +49,7 @@ query($q: String!, $me: String!) {
         }
         commits(last: 50) { nodes { commit { oid parents { totalCount } statusCheckRollup { state } } } }
         myReviews: reviews(last: 20, author: $me) { nodes { state submittedAt commit { oid } } }
+        myPending: reviews(states: [PENDING], first: 1) { nodes { id body createdAt url comments { totalCount } } }
         mergeQueueEntry { state position }
       }
     }
@@ -82,6 +83,7 @@ query($q: String!, $me: String!) {
         commits(last: 50) { nodes { commit { oid parents { totalCount } statusCheckRollup { state } } } }
         latestOpinionatedReviews(first: 30) { nodes { author { login } state submittedAt commit { oid } } }
         myReviews: reviews(last: 20, author: $me) { nodes { state submittedAt commit { oid } } }
+        myPending: reviews(states: [PENDING], first: 1) { nodes { id body createdAt url comments { totalCount } } }
       }
     }
   }
@@ -170,9 +172,9 @@ function repoForCwd(cwd) {
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const HEAD_BYTES = 512 * 1024;
 const INVOCATION = [
-    /<command-name>\/review-pr<\/command-name>\\n<command-args>\s*(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
-    /"skill":"review-pr","args":"\s*(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
-    /"(?:content|text)":"\/review-pr\s+(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
+    /<command-name>\/review-pr(?:-draft)?<\/command-name>\\n<command-args>\s*(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
+    /"skill":"review-pr(?:-draft)?","args":"\s*(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
+    /"(?:content|text)":"\/review-pr(?:-draft)?\s+(?:https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/|#)?(\d+)/g,
 ];
 const DESKTOP_DATA = path.join(os.homedir(), 'AppData', 'Local', 'Claude-Data');
 const desktopCache = new Map();
@@ -281,6 +283,7 @@ const HELPERS = [
     { kind: 'archiver', pattern: /^Archive these \d+ Claude Code sessions/ },
     { kind: 'deleter', pattern: /^Permanently delete these \d+ archived Claude Code sessions/ },
     { kind: 'relay', pattern: /^Relay only, do not do any of the work here/ },
+    { kind: 'dispatcher', pattern: /^\/loop \S+ You are the PR inbox dispatcher/ },
 ];
 
 function firstUserText(head) {
@@ -395,6 +398,41 @@ async function findReviewSessions() {
     return sessions;
 }
 
+function pendingInfo(pr) {
+    const node = pr.myPending?.nodes?.[0];
+    if (!node) return null;
+    const suggest = node.body?.match(/pr-inbox: suggest=(APPROVE|REQUEST_CHANGES|COMMENT)/)?.[1] ?? null;
+    return { id: node.id, reviewUrl: node.url, createdAt: node.createdAt, comments: node.comments.totalCount, suggest, fromInbox: /pr-inbox:/.test(node.body ?? '') };
+}
+
+function allPending() {
+    const seen = new Set();
+    const out = [];
+    for (const pr of [...lastRequested, ...approvedCache.approved, ...approvedCache.dismissed]) {
+        const key = `${pr.repo.toLowerCase()}#${pr.number}`;
+        if (!pr.pending || seen.has(key)) continue;
+        seen.add(key);
+        out.push({ repo: pr.repo, number: pr.number, title: pr.title, url: pr.url, author: pr.author, localClone: pr.localClone ?? null, ...pr.pending });
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+const SUBMIT_EVENTS = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'];
+async function submitPending(repo, number, event) {
+    if (!SUBMIT_EVENTS.includes(event)) throw Object.assign(new Error('Unknown verdict'), { status: 400 });
+    const key = `${String(repo).toLowerCase()}#${number}`;
+    const item = allPending().find((p) => `${p.repo.toLowerCase()}#${p.number}` === key);
+    if (!item) throw Object.assign(new Error(`No pending review on #${number}; refresh and try again`), { status: 404 });
+    const out = await gh(['api', 'graphql',
+        '-f', 'query=mutation($id: ID!, $event: PullRequestReviewEvent!) { submitPullRequestReview(input: { pullRequestReviewId: $id, event: $event }) { pullRequestReview { state url } } }',
+        '-f', `id=${item.id}`, '-f', `event=${event}`]);
+    const review = JSON.parse(out).data.submitPullRequestReview.pullRequestReview;
+    for (const pr of [...lastRequested, ...approvedCache.approved, ...approvedCache.dismissed]) {
+        if (`${pr.repo.toLowerCase()}#${pr.number}` === key) pr.pending = null;
+    }
+    return { state: review.state, url: review.url };
+}
+
 function rereviewInfo(pr) {
     const reviews = pr.myReviews.nodes.filter((r) => r.state !== 'PENDING' && r.submittedAt);
     if (!reviews.length) return null;
@@ -452,6 +490,7 @@ async function fetchPrs() {
                 checks: pr.commits.nodes.at(-1)?.commit.statusCheckRollup?.state ?? null,
                 queue: pr.mergeQueueEntry ? { state: pr.mergeQueueEntry.state, position: pr.mergeQueueEntry.position } : null,
                 rereview: rereviewInfo(pr),
+                pending: pendingInfo(pr),
                 author: pr.author ? { login: pr.author.login, avatarUrl: pr.author.avatarUrl } : null,
                 direct,
                 viaTeams: direct ? [] : viaTeams,
@@ -462,6 +501,125 @@ async function fetchPrs() {
 
     lastRequested = prs;
     return { viewer: data.viewer.login, viewerAvatar: data.viewer.avatarUrl, fetchedAt: new Date().toISOString(), prs };
+}
+
+const AUTO_FILE = path.join(here, 'auto.json');
+const AUTO_STALE_MS = 15 * 60_000;
+const AUTO_MAX_AGE_MS = 30 * 86_400_000;
+let autoState = (() => {
+    try {
+        return JSON.parse(readFileSync(AUTO_FILE, 'utf8'));
+    } catch {
+        return { enabled: false };
+    }
+})();
+autoState.known ??= [];
+autoState.queued ??= {};
+autoState.started ??= {};
+
+async function saveAuto() {
+    await writeFile(AUTO_FILE, JSON.stringify(autoState, null, 2));
+}
+
+const prKey = (pr) => `${pr.repo.toLowerCase()}#${pr.number}`;
+
+function autoEligible(pr) {
+    return !pr.isDraft && !pr.queue && !pr.session && !pr.pending && !!pr.localClone
+        && !(pr.updatedAt && Date.now() - new Date(pr.updatedAt) > AUTO_MAX_AGE_MS);
+}
+
+async function autoTick(requested) {
+    if (!autoState.enabled) return;
+    const known = new Set(autoState.known);
+    let changed = false;
+    for (const pr of requested) {
+        const key = prKey(pr);
+        if (known.has(key)) continue;
+        known.add(key);
+        changed = true;
+        if (autoEligible(pr)) autoState.queued[key] = new Date().toISOString();
+    }
+    for (const key of Object.keys(autoState.queued)) {
+        const pr = requested.find((p) => prKey(p) === key);
+        if (!pr || !autoEligible(pr)) {
+            delete autoState.queued[key];
+            changed = true;
+        }
+    }
+    if (changed) {
+        autoState.known = [...known];
+        await saveAuto();
+    }
+}
+
+function autoStatus() {
+    const lastPoll = autoState.lastPoll ?? null;
+    return {
+        enabled: !!autoState.enabled,
+        since: autoState.since ?? null,
+        lastPoll,
+        queued: Object.keys(autoState.queued).length,
+        dispatcherStale: !!autoState.enabled && (!lastPoll || Date.now() - new Date(lastPoll) > AUTO_STALE_MS),
+    };
+}
+
+async function setAuto(enabled) {
+    if (enabled && !autoState.enabled) {
+        if (!lastRequested.length) await fetchPrs();
+        autoState = { enabled: true, since: new Date().toISOString(), known: lastRequested.map(prKey), queued: {}, started: autoState.started ?? {}, lastPoll: autoState.lastPoll ?? null };
+        await saveAuto();
+        if (autoStatus().dispatcherStale) await openDispatcher();
+    } else if (!enabled && autoState.enabled) {
+        autoState.enabled = false;
+        autoState.queued = {};
+        await saveAuto();
+    }
+    return autoStatus();
+}
+
+async function autoQueue(dry) {
+    if (!dry) {
+        autoState.lastPoll = new Date().toISOString();
+        await saveAuto();
+    }
+    if (!autoState.enabled) return { enabled: false, items: [] };
+    const items = [];
+    for (const key of Object.keys(autoState.queued)) {
+        const pr = lastRequested.find((p) => prKey(p) === key);
+        if (!pr) continue;
+        let prompt = `/review-pr-draft ${pr.number}`;
+        if (pr.rereview) {
+            try { prompt = (await buildRecheck(pr.repo, pr.number)).prompt; } catch { /* plain draft review then */ }
+        }
+        items.push({ key, title: `Review ${repoShort(pr.repo)}#${pr.number}`, folder: pr.localClone, prompt });
+    }
+    return { enabled: true, items };
+}
+
+async function autoMarkStarted(keys) {
+    for (const key of keys) {
+        if (typeof key !== 'string' || !autoState.queued[key]) continue;
+        delete autoState.queued[key];
+        autoState.started[key] = new Date().toISOString();
+    }
+    await saveAuto();
+    return autoStatus();
+}
+
+const repoShort = (repo) => repo.split('/')[1];
+
+async function openDispatcher() {
+    const dir = await defaultDir();
+    if (!dir) throw Object.assign(new Error('No local clone found to run the dispatcher in'), { status: 404 });
+    const base = `http://127.0.0.1:${PORT}`;
+    const prompt = `/loop 5m You are the PR inbox dispatcher. Do not review anything in this session. `
+        + `On every run: fetch ${base}/api/auto/queue with curl. It returns JSON with "enabled" and "items" (each with "key", "title", "folder" and "prompt"). `
+        + 'If "enabled" is false, stop the loop and say that Auto was switched off. '
+        + `For each item, start a new session with start_session: initiation "user_asked", context "fresh", use_worktree false, the item's "title" as title, cwd set to the item's "folder" only when it is not this session's folder, and exactly the item's "prompt" as prompt. `
+        + `When an item was started, tell the server with curl -s -X POST -H "Content-Type: application/json" -d '{"keys":["<key>"]}' ${base}/api/auto/started (all started keys in one list). `
+        + 'Do not start anything that is not in the queue, and do not archive, message or change any other session. If the queue is empty, do nothing else and keep this run short.';
+    openInClaudeApp(`claude://code/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(dir)}`);
+    return { opened: true };
 }
 
 let lastRequested = [];
@@ -531,7 +689,8 @@ async function buildRecheck(repo, number) {
     const dir = clones.get(String(repo).toLowerCase());
     if (!dir) throw Object.assign(new Error(`No local clone of ${repo} found`), { status: 404 });
 
-    const parts = [`Re-check PR ${number} with the review-pr skill.`];
+    const draft = autoState.enabled;
+    const parts = [draft ? `/review-pr-draft ${number} Re-check this PR.` : `Re-check PR ${number} with the review-pr skill.`];
     if (info) {
         const before = info.previous === 'approved' ? 'approved it' : info.previous === 'changes' ? 'requested changes' : 'left a review';
         const base = info.baseOid?.slice(0, 12);
@@ -550,7 +709,9 @@ async function buildRecheck(repo, number) {
     parts.push(replies
         ? `There ${replies.count === 1 ? 'is 1 reply' : `are ${replies.count} replies`} to me since then, in my unresolved review threads or comments mentioning me: go through them first and show me the answers you would post before posting any.`
         : 'Also check whether anyone answered my review threads or mentioned me, and address that first if so.');
-    parts.push('If you find nothing blocking and nothing that needs my answer, approve the PR. Otherwise tell me what you found before posting anything.');
+    parts.push(draft
+        ? 'Leave the result as a pending review with a suggested verdict, and do not submit it. Do not post replies in threads either; put what you would answer in the pending review or in your report to me.'
+        : 'If you find nothing blocking and nothing that needs my answer, approve the PR. Otherwise tell me what you found before posting anything.');
     const found = (await findReviewSessions()).get(key);
     const session = found?.kind === 'desktop' ? { id: found.id, title: found.title } : null;
     return { prompt: parts.join(' '), dir, key, replies: !!replies, session };
@@ -875,6 +1036,7 @@ async function fetchApproved() {
             approvedAt: mine.submittedAt,
             sinceApproval: since,
             review,
+            pending: pendingInfo(pr),
             checks: commits.at(-1)?.statusCheckRollup?.state ?? null,
             queue: pr.mergeQueueEntry ? { state: pr.mergeQueueEntry.state, position: pr.mergeQueueEntry.position } : null,
             localClone: localClones.get(repo.toLowerCase()) ?? null,
@@ -930,6 +1092,7 @@ async function findFinishedSessions() {
     for (const s of open) {
         const helper = s.cliId && helperByCli.get(s.cliId);
         if (!helper || s.lastActive > idleBefore || goingAway.has(s.id)) continue;
+        if (helper === 'dispatcher' && autoState.enabled) continue;
         const keep = open.filter((c) => c.parent === s.id && !goingAway.has(c.id)).map((c) => ({ id: c.id, title: c.title }));
         finished.push({ id: s.id, title: s.title, helper, keep, state: 'done' });
         goingAway.add(s.id);
@@ -1001,9 +1164,9 @@ async function launchReview(repo, number) {
     }
     const dir = (await findClones()).get(String(repo).toLowerCase());
     if (!dir) throw Object.assign(new Error(`No local clone of ${repo} found`), { status: 404 });
-    const prompt = `Review PR ${number} with the review-pr skill`;
+    const prompt = autoState.enabled ? `/review-pr-draft ${number}` : `Review PR ${number} with the review-pr skill`;
     openInClaudeApp(`claude://code/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(dir)}`);
-    return { resumed: false, dir };
+    return { resumed: false, dir, draft: autoState.enabled };
 }
 
 async function launchReviewAll(prs) {
@@ -1018,7 +1181,7 @@ async function launchReviewAll(prs) {
         .join('; ');
     const prompt = `I want these ${prs.length} PRs reviewed in parallel, each in its own new session. Do not review any of them here. `
         + `Start one session per PR right away with start_session (initiation "user_asked", context "fresh", use_worktree false, and cwd set to the folder given only when it is not this folder), `
-        + `whose prompt is "/review-pr <number>" plus, for a PR without a local clone, a line naming its repo: ${list}. `
+        + `whose prompt is "/${autoState.enabled ? 'review-pr-draft' : 'review-pr'} <number>" plus, for a PR without a local clone, a line naming its repo: ${list}. `
         + 'When they are all started, list them with a link to each session and stop.';
     openInClaudeApp(`claude://code/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(folder)}`);
     return { folder, count: prs.length };
@@ -1058,6 +1221,11 @@ const server = http.createServer(async (req, res) => {
             return send(res, 200, await readFile(path.join(here, 'widget.html'), 'utf8'), 'text/html; charset=utf-8');
         }
 
+        if (req.method === 'GET' && url.pathname === '/widget.png') {
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=86400' });
+            return res.end(await readFile(path.join(here, 'widget.png')));
+        }
+
         if (req.method === 'GET' && url.pathname === '/api/prs') {
             const force = url.searchParams.has('force');
             const [prs, replies, approved, finished, oldArchived] = await Promise.all([
@@ -1077,7 +1245,8 @@ const server = http.createServer(async (req, res) => {
             const dismissed = approved.dismissed.filter((p) => !requestedKeys.has(`${p.repo.toLowerCase()}#${p.number}`));
             const sessionsNow = await findReviewSessions();
             const repliesOut = replies.map((r) => ({ ...r, session: sessionSummary(sessionsNow.get(`${r.repo.toLowerCase()}#${r.number}`)) }));
-            return send(res, 200, { ...prs, replies: repliesOut, approved: approved.approved, dismissed, mine, merged, mergedDays: MERGED_DAYS, finished, oldArchived, rateLimit, homeRepo: homeRepo(), deleteAfterDays: DELETE_AFTER_DAYS });
+            await autoTick(prs.prs);
+            return send(res, 200, { ...prs, replies: repliesOut, approved: approved.approved, dismissed, mine, merged, mergedDays: MERGED_DAYS, pending: allPending(), auto: autoStatus(), finished, oldArchived, rateLimit, homeRepo: homeRepo(), deleteAfterDays: DELETE_AFTER_DAYS });
         }
 
         if (req.method === 'GET' && url.pathname === '/api/stats') {
@@ -1100,9 +1269,19 @@ const server = http.createServer(async (req, res) => {
             }
         }
 
+        if (req.method === 'POST' && url.pathname === '/api/auto/started') {
+            const origin = req.headers.origin;
+            if (origin && origin !== `http://${HOST}:${PORT}` && origin !== `http://localhost:${PORT}`) {
+                return send(res, 403, { error: 'Cross-origin request refused' });
+            }
+            if (!String(req.headers['content-type']).startsWith('application/json')) {
+                return send(res, 415, { error: 'Expected JSON' });
+            }
+        }
+
         if (req.method === 'POST' && url.pathname === '/api/open') {
             const { url: target } = await readJson(req);
-            if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(target ?? '')) return send(res, 400, { error: 'Not a GitHub PR link' });
+            if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+(?:\/files)?$/.test(target ?? '')) return send(res, 400, { error: 'Not a GitHub PR link' });
             spawn('rundll32.exe', ['url.dll,FileProtocolHandler', target], { detached: true, stdio: 'ignore' }).unref();
             return send(res, 200, { ok: true });
         }
@@ -1113,6 +1292,32 @@ const server = http.createServer(async (req, res) => {
                 && prs.every((pr) => Number.isInteger(pr?.number) && pr.number > 0 && /^[\w.-]+\/[\w.-]+$/.test(pr?.repo ?? ''));
             if (!valid) return send(res, 400, { error: 'Invalid PR list' });
             return send(res, 200, await launchReviewAll(prs));
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/review/pending/submit') {
+            const { repo, number, event } = await readJson(req);
+            if (!Number.isInteger(number) || number <= 0 || !/^[\w.-]+\/[\w.-]+$/.test(repo ?? '')) {
+                return send(res, 400, { error: 'Invalid repo or PR number' });
+            }
+            return send(res, 200, await submitPending(repo, number, event));
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/review/auto') {
+            const { enabled } = await readJson(req);
+            return send(res, 200, await setAuto(enabled === true));
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/review/auto/dispatcher') {
+            return send(res, 200, await openDispatcher());
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/auto/queue') {
+            return send(res, 200, await autoQueue(url.searchParams.has('dry')));
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/auto/started') {
+            const { keys } = await readJson(req);
+            return send(res, 200, await autoMarkStarted(Array.isArray(keys) ? keys : []));
         }
 
         if (req.method === 'POST' && url.pathname === '/api/review/mine') {
