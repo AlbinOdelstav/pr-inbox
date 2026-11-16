@@ -636,6 +636,23 @@ async function fetchReplies(force) {
     return items;
 }
 
+const MERGED_DAYS = 30;
+const MERGED_TTL = 10 * 60_000;
+let mergedCache = null;
+async function fetchMerged(force) {
+    if (!force && mergedCache && Date.now() - mergedCache.at < MERGED_TTL) return mergedCache.items;
+    const since = new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const query = 'query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes { ... on PullRequest { '
+        + 'number title url mergedAt additions deletions repository { nameWithOwner } } } } }';
+    const raw = await gh(['api', 'graphql', '-f', `query=${query}`, '-f', `q=is:pr author:@me is:merged merged:>=${since} sort:updated-desc`]);
+    const items = JSON.parse(raw).data.search.nodes.filter((pr) => pr?.number).map((pr) => ({
+        number: pr.number, title: pr.title, url: pr.url, repo: pr.repository.nameWithOwner,
+        mergedAt: pr.mergedAt, additions: pr.additions, deletions: pr.deletions,
+    })).sort((a, b) => b.mergedAt.localeCompare(a.mergedAt));
+    mergedCache = { at: Date.now(), items };
+    return items;
+}
+
 let mineCache = null;
 async function fetchMine(force) {
     if (force || !mineCache || Date.now() - mineCache.at >= REPLIES_TTL) {
@@ -1051,6 +1068,7 @@ const server = http.createServer(async (req, res) => {
                 findOldArchived().catch(() => []),
             ]);
             const mine = await fetchMine(force).catch(() => []);
+            const merged = await fetchMerged(force).catch(() => mergedCache?.items ?? []);
             const rateLimit = await gh(['api', 'rate_limit', '--jq', '.resources.graphql'])
                 .then((out) => JSON.parse(out))
                 .then((r) => ({ used: r.used, remaining: r.remaining, limit: r.limit, resetAt: new Date(r.reset * 1000).toISOString() }))
@@ -1059,7 +1077,7 @@ const server = http.createServer(async (req, res) => {
             const dismissed = approved.dismissed.filter((p) => !requestedKeys.has(`${p.repo.toLowerCase()}#${p.number}`));
             const sessionsNow = await findReviewSessions();
             const repliesOut = replies.map((r) => ({ ...r, session: sessionSummary(sessionsNow.get(`${r.repo.toLowerCase()}#${r.number}`)) }));
-            return send(res, 200, { ...prs, replies: repliesOut, approved: approved.approved, dismissed, mine, finished, oldArchived, rateLimit, homeRepo: homeRepo(), deleteAfterDays: DELETE_AFTER_DAYS });
+            return send(res, 200, { ...prs, replies: repliesOut, approved: approved.approved, dismissed, mine, merged, mergedDays: MERGED_DAYS, finished, oldArchived, rateLimit, homeRepo: homeRepo(), deleteAfterDays: DELETE_AFTER_DAYS });
         }
 
         if (req.method === 'GET' && url.pathname === '/api/stats') {

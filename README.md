@@ -14,7 +14,7 @@ It runs on your own machine: a Node server on `127.0.0.1:4477` talks to GitHub t
 - *Older than 30 days*: anything untouched for 30 days, collapsed and left out of the counts.
 - A repo filter when PRs come from more than one repo.
 
-**My PRs**: your own open PRs with their review state, conflicts, failing checks and threads waiting on you.
+**My PRs**: your own open PRs with their review state, conflicts, failing checks and threads waiting on you, and below them the PRs you merged in the last 30 days.
 
 **Stats**: PRs you created, merged and reviewed over 7, 30 and 90 days, and an optional comparison with your team.
 
