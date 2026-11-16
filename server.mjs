@@ -283,7 +283,7 @@ const HELPERS = [
     { kind: 'archiver', pattern: /^Archive these \d+ Claude Code sessions/ },
     { kind: 'deleter', pattern: /^Permanently delete these \d+ archived Claude Code sessions/ },
     { kind: 'relay', pattern: /^Relay only, do not do any of the work here/ },
-    { kind: 'dispatcher', pattern: /^\/loop \S+ You are the PR inbox dispatcher/ },
+    { kind: 'dispatcher', pattern: /^(?:\/loop \S+ )?You are the PR inbox dispatcher/ },
 ];
 
 function firstUserText(head) {
@@ -500,6 +500,7 @@ async function fetchPrs() {
         });
 
     lastRequested = prs;
+    lastFetchAt = Date.now();
     return { viewer: data.viewer.login, viewerAvatar: data.viewer.avatarUrl, fetchedAt: new Date().toISOString(), prs };
 }
 
@@ -552,47 +553,64 @@ async function autoTick(requested) {
     }
 }
 
+const HEARTBEAT_STALE_MS = 5 * 60_000;
+let lastFetchAt = 0;
+const CLAIM_MS = 10 * 60_000;
+let lastHeartbeat = null;
+autoState.claimed ??= {};
+
 function autoStatus() {
-    const lastPoll = autoState.lastPoll ?? null;
     return {
         enabled: !!autoState.enabled,
         since: autoState.since ?? null,
-        lastPoll,
+        lastPoll: lastHeartbeat ?? autoState.lastPoll ?? null,
         queued: Object.keys(autoState.queued).length,
-        dispatcherStale: !!autoState.enabled && (!lastPoll || Date.now() - new Date(lastPoll) > AUTO_STALE_MS),
+        dispatcherStale: !!autoState.enabled && (!lastHeartbeat || Date.now() - new Date(lastHeartbeat) > HEARTBEAT_STALE_MS),
     };
+}
+
+function unclaimed() {
+    return Object.keys(autoState.queued).filter((key) => {
+        const claimed = autoState.claimed[key];
+        return !claimed || Date.now() - new Date(claimed) > CLAIM_MS;
+    });
+}
+
+function autoHeartbeat() {
+    lastHeartbeat = new Date().toISOString();
+    const count = autoState.enabled ? unclaimed().length : 0;
+    return { enabled: !!autoState.enabled, count, wake: !autoState.enabled || count > 0 };
 }
 
 async function setAuto(enabled) {
     if (enabled && !autoState.enabled) {
         if (!lastRequested.length) await fetchPrs();
-        autoState = { enabled: true, since: new Date().toISOString(), known: lastRequested.map(prKey), queued: {}, started: autoState.started ?? {}, lastPoll: autoState.lastPoll ?? null };
+        autoState = { enabled: true, since: new Date().toISOString(), known: lastRequested.map(prKey), queued: {}, claimed: {}, started: autoState.started ?? {} };
         await saveAuto();
         if (autoStatus().dispatcherStale) await openDispatcher();
     } else if (!enabled && autoState.enabled) {
         autoState.enabled = false;
         autoState.queued = {};
+        autoState.claimed = {};
         await saveAuto();
     }
     return autoStatus();
 }
 
-async function autoQueue(dry) {
-    if (!dry) {
-        autoState.lastPoll = new Date().toISOString();
-        await saveAuto();
-    }
-    if (!autoState.enabled) return { enabled: false, items: [] };
+async function autoQueue(dry, current) {
+    if (!current || !autoState.enabled) return { enabled: false, items: [] };
     const items = [];
-    for (const key of Object.keys(autoState.queued)) {
+    for (const key of unclaimed()) {
         const pr = lastRequested.find((p) => prKey(p) === key);
         if (!pr) continue;
+        if (!dry) autoState.claimed[key] = new Date().toISOString();
         let prompt = `/review-pr-draft ${pr.number}`;
         if (pr.rereview) {
             try { prompt = (await buildRecheck(pr.repo, pr.number)).prompt; } catch { /* plain draft review then */ }
         }
         items.push({ key, title: `Review ${repoShort(pr.repo)}#${pr.number}`, folder: pr.localClone, prompt });
     }
+    if (!dry && items.length) await saveAuto();
     return { enabled: true, items };
 }
 
@@ -600,6 +618,7 @@ async function autoMarkStarted(keys) {
     for (const key of keys) {
         if (typeof key !== 'string' || !autoState.queued[key]) continue;
         delete autoState.queued[key];
+        delete autoState.claimed[key];
         autoState.started[key] = new Date().toISOString();
     }
     await saveAuto();
@@ -612,12 +631,16 @@ async function openDispatcher() {
     const dir = await defaultDir();
     if (!dir) throw Object.assign(new Error('No local clone found to run the dispatcher in'), { status: 404 });
     const base = `http://127.0.0.1:${PORT}`;
-    const prompt = `/loop 5m You are the PR inbox dispatcher. Do not review anything in this session. `
-        + `On every run: fetch ${base}/api/auto/queue with curl. It returns JSON with "enabled" and "items" (each with "key", "title", "folder" and "prompt"). `
-        + 'If "enabled" is false, stop the loop and say that Auto was switched off. '
-        + `For each item, start a new session with start_session: initiation "user_asked", context "fresh", use_worktree false, the item's "title" as title, cwd set to the item's "folder" only when it is not this session's folder, and exactly the item's "prompt" as prompt. `
-        + `When an item was started, tell the server with curl -s -X POST -H "Content-Type: application/json" -d '{"keys":["<key>"]}' ${base}/api/auto/started (all started keys in one list). `
-        + 'Do not start anything that is not in the queue, and do not archive, message or change any other session. If the queue is empty, do nothing else and keep this run short.';
+    const wait = `while :; do r=$(curl -s ${base}/api/auto/heartbeat); case "$r" in *'"wake":true'*) echo "$r"; break;; esac; sleep 60; done`;
+    const prompt = 'You are the PR inbox dispatcher. Do not review anything in this session, and keep every turn short. '
+        + `Step 1, waiting: run this exact command with the Bash tool and run_in_background set to true, then end your turn without polling it: ${wait} `
+        + 'It costs no tokens while it waits, and it finishes only when there is work or Auto was switched off. '
+        + `Step 2, when it finishes: if its output says "enabled":false, say that Auto was switched off and stop, without starting the wait again. `
+        + `Otherwise fetch ${base}/api/auto/queue?v=2 with curl. It returns JSON with "items", each with "key", "title", "folder" and "prompt". `
+        + 'For each item, start a new session with start_session: initiation "user_asked", context "fresh", use_worktree false, the item\'s "title" as title, cwd set to the item\'s "folder" only when it is not this session\'s folder, and exactly the item\'s "prompt" as prompt. '
+        + `Then tell the server which ones started, in one call: curl -s -X POST -H "Content-Type: application/json" -d '{"keys":["<key>", ...]}' ${base}/api/auto/started. `
+        + 'Then go back to step 1. '
+        + 'Never start anything that is not in the queue, and never archive, message or change any other session.';
     openInClaudeApp(`claude://code/new?q=${encodeURIComponent(prompt)}&folder=${encodeURIComponent(dir)}`);
     return { opened: true };
 }
@@ -1312,7 +1335,14 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (req.method === 'GET' && url.pathname === '/api/auto/queue') {
-            return send(res, 200, await autoQueue(url.searchParams.has('dry')));
+            return send(res, 200, await autoQueue(url.searchParams.has('dry'), url.searchParams.get('v') === '2'));
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/auto/heartbeat') {
+            if (autoState.enabled && Date.now() - lastFetchAt > 90_000) {
+                await fetchPrs().then((r) => autoTick(r.prs)).catch(() => {});
+            }
+            return send(res, 200, autoHeartbeat());
         }
 
         if (req.method === 'POST' && url.pathname === '/api/auto/started') {

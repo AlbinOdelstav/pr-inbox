@@ -34,11 +34,11 @@ The prompts use the `review-pr` and `address-pr-comments` skills. Without them i
 The **Auto** switch in the widget's footer decides how reviews end.
 
 - **Off** (the default): nothing starts by itself, and reviews use `review-pr`, which approves or requests changes itself.
-- **On**: reviews use `review-pr-draft`, which leaves a **pending review** on GitHub: inline comments and a summary that only you can see, with a suggested verdict. Nothing is submitted and nobody is notified. Review requests that arrive after you switch Auto on start a draft review by themselves within about five minutes, and the logo gets a green dot.
+- **On**: reviews use `review-pr-draft`, which leaves a **pending review** on GitHub: inline comments and a summary that only you can see, with a suggested verdict. Nothing is submitted and nobody is notified. Review requests that arrive after you switch Auto on start a draft review by themselves within about a minute, and the logo gets a green dot.
 
 Pending reviews show at the top of Reviews. The title opens "Files changed", where the drafted comments appear inline for you to edit. **Send** submits one with the verdict you pick (Approve, Request changes or Comment), and **Send all** submits several from a checkbox list. Submitting goes straight through GitHub's API and only ever happens when you click. A notification appears when a new pending review is ready.
 
-Auto needs one **dispatcher** session: switching Auto on opens it in Claude, and you press Enter in it once. It checks the server every five minutes and starts a session per new PR. If it stops checking in, the switch turns amber with a button to start a new one. Drafts, queued PRs, PRs that already have a session and PRs untouched for 30 days are never started automatically.
+Auto needs one **dispatcher** session: switching Auto on opens it in Claude, and you press Enter in it once. A background shell loop in it checks the server every minute without using tokens, and Claude only wakes to start a session per new PR. If it stops checking in, the switch turns amber with a button to start a new one. Drafts, queued PRs, PRs that already have a session and PRs untouched for 30 days are never started automatically.
 
 To install the draft skill, copy `skills/review-pr-draft` into `%USERPROFILE%\.claude\skills\`.
 
