@@ -246,9 +246,24 @@ body.collapsed .tabs, body.collapsed main, body.collapsed .wfoot, body.collapsed
     background: var(--text); color: var(--bg); opacity: 0; transform: translateY(6px); transition: all .25s; pointer-events: none; }
 .toast.show { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.apps { flex: none; display: flex; gap: 2px; padding: 5px 8px 4px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+.apps[hidden] { display: none; }
+.apps button { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 7px;
+    font-size: 12px; font-weight: 600; color: var(--text-2); }
+.apps button:hover { color: var(--text); background: var(--row-hover); }
+.apps button[aria-pressed="true"] { color: var(--text); background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .08), inset 0 0 0 1px var(--border); }
+.apps .abadge { min-width: 16px; height: 16px; padding: 0 5px; border-radius: 8px; display: inline-grid; place-items: center;
+    font-size: 10px; font-weight: 700; background: var(--accent-soft); color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.apps .abadge:empty { display: none; }
+.apps .abadge.alert { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.extframe { flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: var(--bg); }
+.extframe[hidden] { display: none; }
+body.ext-mode > header, body.ext-mode > .tabs, body.ext-mode > .repos, body.ext-mode > main, body.ext-mode > .wfoot { display: none; }
 </style>
 </head>
 <body>
+<nav class="apps" id="apps" role="tablist" aria-label="Views" hidden></nav>
 <header>
     <span class="logo" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
     <span class="name">Reviews</span>
@@ -792,7 +807,7 @@ function setCollapsed(collapsed, persist = true) {
     document.body.classList.toggle('collapsed', collapsed);
     $('toggle').setAttribute('aria-expanded', String(!collapsed));
     $('toggle').title = collapsed ? 'Expand' : 'Collapse';
-    try { window.resizeTo(window.outerWidth, collapsed ? chrome + HEADER : (expandedHeight || 460)); } catch {}
+    try { window.resizeTo(window.outerWidth, collapsed ? chrome + HEADER + ($('apps').hidden ? 0 : $('apps').offsetHeight) : (expandedHeight || 460)); } catch {}
     if (persist) store.set('w-collapsed', collapsed ? '1' : '0');
 }
 
@@ -1103,9 +1118,61 @@ window.addEventListener('resize', () => {
 });
 setInterval(() => { if (!document.hidden) load(); }, 60_000);
 
+const frames = new Map();
+function showApp(id) {
+    const ext = id !== 'reviews' && frames.has(id);
+    if (ext && document.body.classList.contains('collapsed')) setCollapsed(false);
+    document.body.classList.toggle('ext-mode', ext);
+    for (const [fid, f] of frames) f.hidden = fid !== id;
+    for (const b of $('apps').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.app === (ext ? id : 'reviews')));
+    store.set('w-app', ext ? id : 'reviews');
+}
+function appButton(id, label) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.app = id;
+    b.setAttribute('role', 'tab');
+    b.append(label);
+    const badge = document.createElement('span');
+    badge.className = 'abadge';
+    b.append(badge);
+    b.addEventListener('click', () => showApp(id));
+    return b;
+}
+async function loadExtensions() {
+    let list = [];
+    try { list = await (await fetch('/api/extensions')).json(); } catch {}
+    if (!Array.isArray(list) || !list.length) return;
+    const reviews = appButton('reviews', 'Reviews');
+    $('apps').append(reviews);
+    new MutationObserver(() => { reviews.querySelector('.abadge').textContent = /^\d+$/.test($('count').textContent) && $('count').textContent !== '0' ? $('count').textContent : ''; })
+        .observe($('count'), { childList: true, characterData: true, subtree: true });
+    for (const { id, label } of list) {
+        $('apps').append(appButton(id, label));
+        const frame = document.createElement('iframe');
+        frame.className = 'extframe';
+        frame.title = label;
+        frame.src = `/ext/${encodeURIComponent(id)}/`;
+        frame.hidden = true;
+        document.body.insertBefore(frame, $('wfoot').nextSibling);
+        frames.set(id, frame);
+    }
+    $('apps').hidden = false;
+    showApp(store.get('w-app', 'reviews'));
+}
+window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.data?.type !== 'pr-inbox:extension-badge') return;
+    const id = [...frames].find(([, f]) => f.contentWindow === e.source)?.[0];
+    const badge = id && $('apps').querySelector(`button[data-app="${CSS.escape(id)}"] .abadge`);
+    if (!badge) return;
+    badge.textContent = Number.isInteger(e.data.count) && e.data.count > 0 ? String(e.data.count) : e.data.alert ? '!' : '';
+    badge.classList.toggle('alert', !!e.data.alert);
+});
+
 if (store.get('w-collapsed', '0') === '1') setCollapsed(true, false);
 render();
 load();
+loadExtensions();
 </script>
 </body>
 </html>

@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -1232,9 +1232,45 @@ function readJson(req) {
     });
 }
 
+// Extensions: extra tabs from local folders, listed in config.json as
+// { "id": "notes", "label": "Notes", "module": "C:/path/to/extension.mjs" }.
+// The module's default export gets { id, origins } and returns { handle(req, res, pathname, searchParams) };
+// it is mounted under /ext/<id>/ and shown in the widget in an iframe of its own.
+const EXTENSIONS = new Map();
+async function loadExtensions() {
+    for (const ext of CONFIG.extensions ?? []) {
+        if (!/^[a-z0-9-]{1,32}$/.test(ext?.id ?? '') || typeof ext.module !== 'string') {
+            console.error('Skipping an extension without a valid id and module');
+            continue;
+        }
+        try {
+            const mod = await import(pathToFileURL(path.resolve(here, ext.module)).href);
+            const instance = await mod.default({ id: ext.id, origins: [`http://localhost:${PORT}`, `http://${HOST}:${PORT}`] });
+            EXTENSIONS.set(ext.id, { id: ext.id, label: String(ext.label ?? ext.id), handle: instance.handle });
+        } catch (err) {
+            console.error(`Extension ${ext.id} failed to load:`, err);
+        }
+    }
+}
+
 const server = http.createServer(async (req, res) => {
     try {
         const url = new URL(req.url, `http://${req.headers.host}`);
+
+        const extPath = /^\/ext\/([a-z0-9-]+)(\/.*)?$/.exec(url.pathname);
+        if (extPath) {
+            const ext = EXTENSIONS.get(extPath[1]);
+            if (!ext) return send(res, 404, { error: 'No such extension' });
+            if (!extPath[2]) {
+                res.writeHead(301, { Location: `/ext/${ext.id}/` });
+                return res.end();
+            }
+            return await ext.handle(req, res, extPath[2], url.searchParams);
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/extensions') {
+            return send(res, 200, [...EXTENSIONS.values()].map(({ id, label }) => ({ id, label })));
+        }
 
         if (req.method === 'GET' && url.pathname === '/') {
             return send(res, 200, await readFile(path.join(here, 'index.html'), 'utf8'), 'text/html; charset=utf-8');
@@ -1406,6 +1442,7 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
+await loadExtensions();
 server.listen(PORT, HOST, () => {
     const address = `http://localhost:${PORT}`;
     console.log(`PR inbox running at ${address}`);

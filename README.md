@@ -70,6 +70,27 @@ To install the draft skill, copy `skills/review-pr-draft` into `%USERPROFILE%\.c
 | `benchmarkTeam` | off | `org/team-slug` to compare your stats with, refreshed once a day |
 | `cloneRoots` | `C:\`, home, `~\source\repos`, `~\repos` | Folders searched for local clones |
 | `appId` | `PrInbox.Widget` | Windows taskbar identity of the widget |
+| `extensions` | none | Extra tabs from your own local tools, see below |
+
+### Extensions
+
+An extension adds a tab next to Reviews in the widget, so a tool of your own can live in the same window without
+its code being part of this repo. List each one in `config.json`:
+
+```json
+"extensions": [
+  { "id": "notes", "label": "Notes", "module": "C:/path/to/your-tool/extension.mjs" }
+]
+```
+
+- `id` is lowercase letters, digits and dashes; `label` is the tab's name.
+- `module` is an ES module whose default export is called once at startup with `{ id, origins }` and returns
+  `{ handle(req, res, pathname, searchParams) }`. The server mounts it under `/ext/<id>/`; `pathname` starts with `/`
+  and is relative to that mount. `/` should answer with the page the tab shows, which the widget loads in an iframe.
+- `origins` are the widget's own origins. Accept a POST only when its `Origin` header is one of them.
+- The page can put a badge on its tab with
+  `parent.postMessage({ type: 'pr-inbox:extension-badge', count, alert }, location.origin)`.
+- An extension that fails to load is skipped and logged; the widget then shows no tab for it.
 
 ## GitHub usage
 
